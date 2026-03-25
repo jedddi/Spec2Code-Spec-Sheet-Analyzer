@@ -88,14 +88,24 @@ export default function FileList({ refreshKey }: FileListProps) {
         body: JSON.stringify({ storagePath }),
       });
 
-      const result = await res.json();
+      const text = await res.text();
+      let result: Record<string, unknown>;
+      try {
+        result = JSON.parse(text);
+      } catch {
+        const msg = res.status === 504
+          ? "Function timed out — try a smaller file"
+          : `Server error (${res.status})`;
+        alert(`Code generation failed: ${msg}`);
+        return;
+      }
 
       if (!res.ok) {
         alert(`Code generation failed: ${result.error ?? "Unknown error"}`);
         return;
       }
 
-      setGeneratedCode(result.code);
+      setGeneratedCode(result.code as string);
       setModalFileName(displayName(fileName));
     } catch (err) {
       alert(
@@ -117,14 +127,24 @@ export default function FileList({ refreshKey }: FileListProps) {
         body: JSON.stringify({ storagePath }),
       });
 
-      const result = await res.json();
+      const text = await res.text();
+      let result: Record<string, unknown>;
+      try {
+        result = JSON.parse(text);
+      } catch {
+        const msg = res.status === 504
+          ? "Function timed out — try a smaller file"
+          : `Server error (${res.status})`;
+        alert(`Quick Specs failed: ${msg}`);
+        return;
+      }
 
       if (!res.ok) {
         alert(`Quick Specs failed: ${result.error ?? "Unknown error"}`);
         return;
       }
 
-      setSpecsContent(result.specs);
+      setSpecsContent(result.specs as string);
       setSpecsFileName(displayName(fileName));
     } catch (err) {
       alert(

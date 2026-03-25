@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/src/lib/supabase/server";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const MODEL = "gemini-2.5-flash-lite";
 

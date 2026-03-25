@@ -193,16 +193,31 @@ export default function UploadPdf({ onUploadComplete }: UploadPdfProps) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ storagePath: entry.storagePath }),
           });
-          const result = await res.json();
+
+          const text = await res.text();
+          let result: Record<string, unknown>;
+          try {
+            result = JSON.parse(text);
+          } catch {
+            const isTimeout = res.status === 504;
+            updateFile(entry.id, {
+              status: "error",
+              error: isTimeout
+                ? "Function timed out — the PDF may be too large"
+                : `Server error (${res.status}): non-JSON response`,
+            });
+            return;
+          }
+
           if (!res.ok) {
             updateFile(entry.id, {
               status: "error",
-              error: result.error ?? "Ingestion failed",
+              error: (result.error as string) ?? "Ingestion failed",
             });
           } else {
             updateFile(entry.id, {
               status: "done",
-              chunkCount: result.chunkCount,
+              chunkCount: result.chunkCount as number,
             });
           }
         } catch (err) {

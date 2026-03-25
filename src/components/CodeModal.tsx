@@ -40,7 +40,7 @@ export default function CodeModal({ code, fileName, onClose }: CodeModalProps) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-blue-300 bg-white shadow-xl">
+      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-blue-300 bg-white shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3">
           <div className="min-w-0 flex-1">
@@ -84,7 +84,7 @@ export default function CodeModal({ code, fileName, onClose }: CodeModalProps) {
 
         {/* Code block */}
         <div className="flex-1 overflow-auto bg-zinc-950 p-5">
-          <pre className="text-sm leading-6 text-zinc-100">
+          <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-zinc-100">
             <code>{code}</code>
           </pre>
         </div>

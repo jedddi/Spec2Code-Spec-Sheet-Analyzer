@@ -5,6 +5,7 @@ import { generateEmbeddings } from "@/src/lib/ingest/embed";
 import { supabaseAdmin } from "@/src/lib/supabase/server";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   let body: unknown;
