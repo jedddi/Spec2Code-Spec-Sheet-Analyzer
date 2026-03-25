@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
+import SidebarChat from "../src/components/SidebarChat";
 import UploadPdf from "../src/components/UploadPdf";
 import FileList from "../src/components/FileList";
 
@@ -9,17 +9,15 @@ export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
-    <div className="min-h-screen w-full bg-white">
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-10 px-6 pt-10 pb-16">
-        <Link
-          href="/chat"
-          className="inline-flex w-fit items-center rounded-full border border-blue-500 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-50"
-        >
-          Chat with your documents
-        </Link>
-        <UploadPdf onUploadComplete={() => setRefreshKey((k) => k + 1)} />
-        <FileList refreshKey={refreshKey} />
-      </div>
+    <div className="flex h-screen w-full overflow-hidden bg-white">
+      <SidebarChat />
+
+      <main className="flex flex-1 flex-col items-center justify-center overflow-y-auto">
+        <div className="flex w-full max-w-xl flex-col gap-10 px-6 -translate-x-25">
+          <UploadPdf onUploadComplete={() => setRefreshKey((k) => k + 1)} />
+          <FileList refreshKey={refreshKey} />
+        </div>
+      </main>
     </div>
   );
 }
