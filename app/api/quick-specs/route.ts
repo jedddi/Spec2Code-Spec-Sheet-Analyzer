@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/src/lib/supabase/server";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MODEL = "gemini-2.5-flash-lite";
+const MODEL = "gemini-2.5-flash";
 
 const SYSTEM_PROMPT = `You are a Hardware Validation Engineer. Extract technical specifications from the provided datasheet text. You MUST return the data in a clean Markdown table with the following columns: Parameter, Value, and Notes.
 Focus on:

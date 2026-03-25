@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/src/lib/supabase/server";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MODEL = "gemini-2.5-flash-lite";
+const MODEL = "gemini-2.5-flash";
 
 export async function POST(request: NextRequest) {
   let body: unknown;
