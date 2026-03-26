@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { extractTextFromPdf } from "@/src/lib/ingest/extract";
 import { chunkText } from "@/src/lib/ingest/chunk";
 import { generateEmbeddings } from "@/src/lib/ingest/embed";
-import { supabaseAdmin } from "@/src/lib/supabase/server";
+import { supabaseAdmin, createServerSupabase } from "@/src/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
+  const supabase = await createServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();

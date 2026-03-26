@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 import { searchDocuments } from "@/src/lib/retrieval/search";
+import { createServerSupabase } from "@/src/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,12 @@ ${query}
 }
 
 export async function POST(request: NextRequest) {
+  const supabase = await createServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();

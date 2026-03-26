@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/src/lib/supabase/server";
+import { supabaseAdmin, createServerSupabase } from "@/src/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -20,6 +20,12 @@ Focus on:
     If a value is not found, write "Not Specified" in the Value column.`;
 
 export async function POST(request: NextRequest) {
+  const supabase = await createServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();

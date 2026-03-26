@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { createBrowserSupabase } from "../lib/supabase/client";
 
 const BUCKET_NAME = "Spec-sheets";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -38,6 +39,7 @@ export default function UploadPdf({ onUploadComplete }: UploadPdfProps) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
+  const supabase = createBrowserSupabase();
 
   const updateFile = useCallback(
     (id: string, patch: Partial<FileEntry>) =>
@@ -48,7 +50,10 @@ export default function UploadPdf({ onUploadComplete }: UploadPdfProps) {
   );
 
   const uploadFileXhr = useCallback(
-    (entry: FileEntry) => {
+    async (entry: FileEntry) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token ?? SUPABASE_ANON_KEY;
+
       const xhr = new XMLHttpRequest();
       const url = `${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${entry.storagePath}`;
 
@@ -83,13 +88,13 @@ export default function UploadPdf({ onUploadComplete }: UploadPdfProps) {
       };
 
       xhr.open("POST", url);
-      xhr.setRequestHeader("Authorization", `Bearer ${SUPABASE_ANON_KEY}`);
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
       xhr.setRequestHeader("apikey", SUPABASE_ANON_KEY);
       xhr.setRequestHeader("Content-Type", entry.file.type || "application/pdf");
       xhr.setRequestHeader("x-upsert", "false");
       xhr.send(entry.file);
     },
-    [updateFile],
+    [updateFile, supabase],
   );
 
   const addFiles = useCallback(

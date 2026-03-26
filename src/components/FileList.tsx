@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "../lib/supabase/client";
+import { createBrowserSupabase } from "../lib/supabase/client";
 import CodeModal from "./CodeModal";
 import SpecsDrawer from "./SpecsDrawer";
 
@@ -28,6 +28,8 @@ export default function FileList({ refreshKey }: FileListProps) {
   const [specsName, setSpecsName] = useState<string | null>(null);
   const [specsContent, setSpecsContent] = useState<string | null>(null);
   const [specsFileName, setSpecsFileName] = useState<string>("");
+
+  const supabase = createBrowserSupabase();
 
   const fetchFiles = useCallback(async () => {
     setLoading(true);

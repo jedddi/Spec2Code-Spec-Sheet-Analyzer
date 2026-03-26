@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "../lib/supabase/client";
+import { createBrowserSupabase } from "../lib/supabase/client";
 
 export default function SupabaseStatus() {
   const [loading, setLoading] = useState(false);
   const [bucketNames, setBucketNames] = useState<string[] | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const supabase = createBrowserSupabase();
 
   async function listBuckets() {
     setLoading(true);
@@ -18,7 +19,7 @@ export default function SupabaseStatus() {
     if (error) {
       setErrorMessage(error.message);
     } else {
-      setBucketNames((data ?? []).map((b) => b.name));
+      setBucketNames((data ?? []).map((b: { name: string }) => b.name));
     }
 
     setLoading(false);
