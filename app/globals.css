@@ -83,6 +83,24 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+@keyframes typing-dot-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-0.35rem);
+  }
+}
+
+/* Typing dots: theme --animate-* does not always emit this utility; define explicitly. */
+@layer utilities {
+  .animate-typing-dot-bounce {
+    animation: typing-dot-bounce 1s ease-in-out infinite;
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

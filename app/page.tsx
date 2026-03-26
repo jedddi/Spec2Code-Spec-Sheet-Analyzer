@@ -17,6 +17,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import DocumentChat from "@/src/components/DocumentChat";
 
 export default function Home() {
   const router = useRouter();
@@ -61,13 +62,9 @@ export default function Home() {
             </Button>
           </div>
         </header>
-        <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
-          <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-muted/30 p-8 text-center">
-            <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-              Use the sidebar to upload PDFs and run ingestion. Uploaded
-              documents appear in the{" "}
-              <span className="font-medium text-foreground">Files</span> list.
-            </p>
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 md:p-6">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <DocumentChat className="min-h-0" />
           </div>
         </div>
       </SidebarInset>

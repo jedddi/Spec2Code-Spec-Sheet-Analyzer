@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ModeToggle } from "@/components/mode-toggle";
-import ChatPanel from "@/src/components/ChatPanel";
+import DocumentChat from "@/src/components/DocumentChat";
 import SignOutButton from "@/src/components/SignOutButton";
 
 export default function ChatPage() {
@@ -22,7 +22,7 @@ export default function ChatPage() {
         </header>
 
         <div className="min-h-0 flex-1">
-          <ChatPanel />
+          <DocumentChat />
         </div>
       </div>
     </main>
