@@ -55,21 +55,21 @@ export default function SpecsDrawer({ specs, fileName, onClose }: SpecsDrawerPro
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
-          className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl"
+          className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
+          <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-zinc-900">
+              <h3 className="text-base font-semibold text-foreground">
                 Component Overview
               </h3>
-              <p className="truncate text-xs text-zinc-500">{fileName}</p>
+              <p className="truncate text-xs text-muted-foreground">{fileName}</p>
             </div>
 
             <button
               type="button"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               aria-label="Close"
             >
               <svg
@@ -94,20 +94,20 @@ export default function SpecsDrawer({ specs, fileName, onClose }: SpecsDrawerPro
               remarkPlugins={[remarkGfm]}
               components={{
                 table: ({ children, ...props }) => (
-                  <div className="overflow-x-auto rounded-lg border border-zinc-200">
+                  <div className="overflow-x-auto rounded-lg border border-border">
                     <table className="w-full text-sm" {...props}>
                       {children}
                     </table>
                   </div>
                 ),
                 thead: ({ children, ...props }) => (
-                  <thead className="bg-zinc-50" {...props}>
+                  <thead className="bg-muted" {...props}>
                     {children}
                   </thead>
                 ),
                 th: ({ children, ...props }) => (
                   <th
-                    className="border-b border-zinc-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-600"
+                    className="border-b border-border px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground"
                     {...props}
                   >
                     {children}
@@ -115,34 +115,34 @@ export default function SpecsDrawer({ specs, fileName, onClose }: SpecsDrawerPro
                 ),
                 td: ({ children, ...props }) => (
                   <td
-                    className="border-b border-zinc-100 px-3 py-2 text-zinc-800"
+                    className="border-b border-border/60 px-3 py-2 text-foreground"
                     {...props}
                   >
                     {children}
                   </td>
                 ),
                 tr: ({ children, ...props }) => (
-                  <tr className="transition-colors hover:bg-zinc-50/60" {...props}>
+                  <tr className="transition-colors hover:bg-muted/60" {...props}>
                     {children}
                   </tr>
                 ),
                 p: ({ children, ...props }) => (
-                  <p className="mb-3 leading-relaxed text-zinc-700" {...props}>
+                  <p className="mb-3 leading-relaxed text-foreground/90" {...props}>
                     {children}
                   </p>
                 ),
                 h1: ({ children, ...props }) => (
-                  <h1 className="mb-3 text-lg font-bold text-zinc-900" {...props}>
+                  <h1 className="mb-3 text-lg font-bold text-foreground" {...props}>
                     {children}
                   </h1>
                 ),
                 h2: ({ children, ...props }) => (
-                  <h2 className="mb-2 text-base font-semibold text-zinc-900" {...props}>
+                  <h2 className="mb-2 text-base font-semibold text-foreground" {...props}>
                     {children}
                   </h2>
                 ),
                 h3: ({ children, ...props }) => (
-                  <h3 className="mb-2 text-sm font-semibold text-zinc-900" {...props}>
+                  <h3 className="mb-2 text-sm font-semibold text-foreground" {...props}>
                     {children}
                   </h3>
                 ),
@@ -153,11 +153,11 @@ export default function SpecsDrawer({ specs, fileName, onClose }: SpecsDrawerPro
           </div>
 
           {/* Footer */}
-          <div className="border-t border-zinc-200 px-5 py-3">
+          <div className="border-t border-border px-5 py-3">
             <button
               type="button"
               onClick={copyToClipboard}
-              className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               {copied ? "Copied to Clipboard!" : "Copy to Clipboard"}
             </button>

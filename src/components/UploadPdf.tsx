@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { createBrowserSupabase } from "../lib/supabase/client";
 
 const BUCKET_NAME = "Spec-sheets";
@@ -20,6 +22,8 @@ interface FileEntry {
 
 interface UploadPdfProps {
   onUploadComplete?: () => void;
+  /** Tighter layout for narrow sidebar panels. */
+  variant?: "default" | "sidebar";
 }
 
 function generateId(): string {
@@ -34,12 +38,22 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
-export default function UploadPdf({ onUploadComplete }: UploadPdfProps) {
+export default function UploadPdf({
+  onUploadComplete,
+  variant = "default",
+}: UploadPdfProps) {
+  const isSidebar = variant === "sidebar";
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [dragging, setDragging] = useState(false);
+  /** Avoid SSR vs client mismatch on `disabled` for the ingest button (e.g. Next hydration warnings). */
+  const [hydrated, setHydrated] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
-  const supabase = createBrowserSupabase();
+  const supabase = useMemo(() => createBrowserSupabase(), []);
+
+  useLayoutEffect(() => {
+    setHydrated(true);
+  }, []);
 
   const updateFile = useCallback(
     (id: string, patch: Partial<FileEntry>) =>
@@ -172,17 +186,19 @@ export default function UploadPdf({ onUploadComplete }: UploadPdfProps) {
     [addFiles],
   );
 
-  const allUploaded =
-    files.length > 0 && files.every((f) => f.status !== "uploading");
   const hasUploading = files.some((f) => f.status === "uploading");
+  const hasIngesting = files.some((f) => f.status === "ingesting");
   const allDone =
     files.length > 0 && files.every((f) => f.status === "done");
+  const hasWorkToIngest = files.some((f) => f.status === "uploaded");
 
   const doneDisabled =
-    files.length === 0 ||
+    !hasWorkToIngest ||
     hasUploading ||
-    allDone ||
-    files.every((f) => f.status === "ingesting");
+    hasIngesting ||
+    allDone;
+
+  const ingestionButtonDisabled = !hydrated || doneDisabled;
 
   async function handleDone() {
     const toIngest = files.filter((f) => f.status === "uploaded");
@@ -238,36 +254,60 @@ export default function UploadPdf({ onUploadComplete }: UploadPdfProps) {
     onUploadComplete?.();
   }
 
-  return (
-    <section className="w-full max-w-xl">
-      <div className="overflow-hidden rounded-2xl border-2 border-blue-500 bg-white shadow-lg">
-        {/* Title */}
-        <div className="px-8 pt-8 pb-4">
-          <h2 className="text-center text-2xl font-bold italic text-zinc-800">
-            File Upload
-          </h2>
-        </div>
+  const shellClass = isSidebar
+    ? "rounded-lg border border-sidebar-border bg-sidebar-accent/50 shadow-none"
+    : "rounded-xl border border-border bg-card shadow-sm";
 
-        {/* Drop zone */}
-        <div className="px-8">
+  const dropBase = isSidebar
+    ? "border-sidebar-border bg-sidebar/40 text-sidebar-foreground"
+    : "border-border bg-muted/30 text-muted-foreground";
+
+  const dropActive = isSidebar
+    ? "border-sidebar-primary bg-sidebar-accent"
+    : "border-primary bg-primary/5";
+
+  const mutedText = isSidebar
+    ? "text-sidebar-foreground/70"
+    : "text-muted-foreground";
+
+  const labelStrong = isSidebar
+    ? "text-sidebar-foreground"
+    : "text-foreground";
+
+  return (
+    <section className={cn("w-full", !isSidebar && "max-w-xl")}>
+      <div className={cn("overflow-hidden", shellClass)}>
+        {!isSidebar && (
+          <div className="border-b border-border px-6 py-4">
+            <h2 className="text-center text-lg font-semibold tracking-tight text-foreground">
+              File upload
+            </h2>
+          </div>
+        )}
+
+        <div className={cn(isSidebar ? "p-3" : "p-6 pt-4")}>
           <div
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
-            className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 transition-colors ${
-              dragging
-                ? "border-blue-500 bg-blue-50"
-                : "border-zinc-300 bg-white"
-            }`}
+            className={cn(
+              "flex flex-col items-center justify-center rounded-md border border-dashed transition-colors",
+              isSidebar ? "px-3 py-6" : "px-6 py-10",
+              dragging ? dropActive : dropBase,
+            )}
           >
-            {/* Cloud icon */}
             <svg
-              className="mb-3 h-12 w-12 text-blue-500"
+              className={cn(
+                "mb-2 opacity-70",
+                isSidebar ? "h-9 w-9" : "h-11 w-11",
+                isSidebar ? "text-sidebar-foreground" : "text-muted-foreground",
+              )}
               fill="none"
               viewBox="0 0 48 48"
               stroke="currentColor"
               strokeWidth={1.5}
+              aria-hidden
             >
               <path
                 strokeLinecap="round"
@@ -281,14 +321,19 @@ export default function UploadPdf({ onUploadComplete }: UploadPdfProps) {
               />
             </svg>
 
-            <p className="text-sm text-zinc-500">
-              Drag files here or{" "}
+            <p className={cn("text-center text-sm", mutedText)}>
+              Drag PDFs here or{" "}
               <button
                 type="button"
                 onClick={handleBrowse}
-                className="font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                className={cn(
+                  "font-medium underline-offset-4 hover:underline",
+                  isSidebar
+                    ? "text-sidebar-primary"
+                    : "text-primary",
+                )}
               >
-                Browse
+                browse
               </button>
             </p>
           </div>
@@ -303,57 +348,89 @@ export default function UploadPdf({ onUploadComplete }: UploadPdfProps) {
           />
         </div>
 
-        {/* File list */}
         {files.length > 0 && (
-          <div className="mt-4 flex flex-col gap-3 px-8">
+          <div
+            className={cn(
+              "flex flex-col gap-2 border-t px-3 pb-1",
+              isSidebar
+                ? "border-sidebar-border px-3"
+                : "border-border px-6",
+            )}
+          >
             {files.map((entry) => (
-              <div key={entry.id} className="flex items-start gap-3">
-                {/* PDF icon */}
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded bg-zinc-100 text-[10px] font-bold uppercase text-zinc-400">
+              <div
+                key={entry.id}
+                className="flex items-start gap-3 rounded-md px-1 py-2"
+              >
+                <div
+                  className={cn(
+                    "flex size-9 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold uppercase",
+                    isSidebar
+                      ? "bg-sidebar-accent text-sidebar-foreground/70"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
                   PDF
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-zinc-800">
+                  <p
+                    className={cn(
+                      "truncate text-sm font-medium",
+                      labelStrong,
+                    )}
+                  >
                     {entry.file.name}
                   </p>
 
-                  {/* Progress bar */}
-                  <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-zinc-200">
+                  <div
+                    className={cn(
+                      "mt-1.5 h-1.5 w-full overflow-hidden rounded-full",
+                      isSidebar ? "bg-sidebar-border" : "bg-muted",
+                    )}
+                  >
                     <div
-                      className={`h-full rounded-full transition-all duration-300 ${
-                        entry.status === "error"
-                          ? "bg-red-400"
-                          : entry.status === "done"
-                            ? "bg-green-400"
-                            : "bg-blue-500"
-                      }`}
+                      className={cn(
+                        "h-full rounded-full transition-all duration-300",
+                        entry.status === "error" && "bg-destructive",
+                        entry.status === "done" && "bg-primary",
+                        entry.status !== "error" &&
+                          entry.status !== "done" &&
+                          "bg-primary/80",
+                      )}
                       style={{ width: `${entry.progress}%` }}
                     />
                   </div>
 
-                  {/* Size + status */}
-                  <div className="mt-1 flex items-center justify-between text-xs text-zinc-400">
+                  <div
+                    className={cn(
+                      "mt-1 flex items-center justify-between gap-2 text-xs",
+                      mutedText,
+                    )}
+                  >
                     <span>
-                      {formatBytes(entry.loaded)} of{" "}
+                      {formatBytes(entry.loaded)} /{" "}
                       {formatBytes(entry.file.size)}
                     </span>
-                    <span>
+                    <span className="shrink-0 tabular-nums">
                       {entry.status === "uploading" &&
-                        `Uploading...... ${entry.progress}%`}
+                        `${entry.progress}%`}
                       {entry.status === "uploaded" && "Ready"}
                       {entry.status === "ingesting" && (
-                        <span className="animate-pulse text-blue-600">
-                          Processing...
+                        <span className="animate-pulse text-primary">
+                          Processing…
                         </span>
                       )}
                       {entry.status === "done" && (
-                        <span className="text-green-500">
-                          Done{entry.chunkCount != null && ` — ${entry.chunkCount} chunks`}
+                        <span className="text-primary">
+                          Done
+                          {entry.chunkCount != null
+                            ? ` · ${entry.chunkCount} chunks`
+                            : ""}
                         </span>
                       )}
                       {entry.status === "error" && (
-                        <span className="text-red-500">
+                        <span className="text-destructive">
                           {entry.error ?? "Error"}
                         </span>
                       )}
@@ -365,20 +442,25 @@ export default function UploadPdf({ onUploadComplete }: UploadPdfProps) {
           </div>
         )}
 
-        {/* Done button */}
-        <div className="px-8 pt-6 pb-8">
-          <button
+        <div
+          className={cn(
+            "border-t p-3",
+            isSidebar ? "border-sidebar-border" : "border-border p-6",
+          )}
+        >
+          <Button
             type="button"
             onClick={handleDone}
-            disabled={doneDisabled}
-            className="w-full rounded-full bg-blue-600 py-3 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={ingestionButtonDisabled}
+            size={isSidebar ? "sm" : "default"}
+            className="w-full"
           >
             {files.some((f) => f.status === "ingesting")
-              ? "Processing..."
+              ? "Processing…"
               : allDone
-                ? "All Done"
-                : "Done"}
-          </button>
+                ? "All done"
+                : "Run ingestion"}
+          </Button>
         </div>
       </div>
     </section>

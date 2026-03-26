@@ -51,7 +51,7 @@ function CitationsDropdown({ citations, messageId }: { citations: Citation[]; me
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex items-center gap-1 rounded-md border border-blue-300 bg-white px-2 py-1 text-[11px] font-medium text-blue-700 transition-colors hover:bg-blue-50"
+        className="flex items-center gap-1 rounded-md border border-primary/40 bg-card px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10"
       >
         <svg
           className={`h-3 w-3 transition-transform ${isOpen ? "rotate-90" : ""}`}
@@ -70,12 +70,12 @@ function CitationsDropdown({ citations, messageId }: { citations: Citation[]; me
           {citations.map((citation, idx) => (
             <li
               key={`${messageId}-cit-${idx}`}
-              className="rounded-md border border-blue-200 bg-white px-2 py-1.5"
+              className="rounded-md border border-primary/25 bg-card px-2 py-1.5"
             >
-              <p className="text-[11px] font-semibold text-blue-800">
+              <p className="text-[11px] font-semibold text-primary">
                 {cleanFilename(citation.document_path)}
               </p>
-              <p className="mt-0.5 text-[11px] leading-4 text-zinc-600">
+              <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
                 {citation.preview}
               </p>
             </li>
@@ -275,17 +275,17 @@ export default function SidebarChat() {
   }
 
   return (
-    <aside className="flex h-full w-[440px] flex-shrink-0 flex-col border-r border-zinc-200 bg-zinc-50 p-4">
+    <aside className="flex h-full w-[440px] flex-shrink-0 flex-col border-r border-border bg-muted p-4">
       {/* Floating chat card */}
-      <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+      <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3">
-          <h2 className="text-sm font-semibold text-zinc-900">Chat</h2>
+        <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
+          <h2 className="text-sm font-semibold text-foreground">Chat</h2>
           {messages.length > 0 && (
             <button
               type="button"
               onClick={clearHistory}
-              className="rounded-md px-2 py-1 text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
+              className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               Clear
             </button>
@@ -296,7 +296,7 @@ export default function SidebarChat() {
         <div className="flex-1 overflow-y-auto px-3 py-4">
           {messages.length === 0 ? (
             <div className="flex h-full items-center justify-center">
-              <p className="px-4 text-center text-sm text-zinc-400">
+              <p className="px-4 text-center text-sm text-muted-foreground">
                 Ask a question about your uploaded documents.
               </p>
             </div>
@@ -316,8 +316,8 @@ export default function SidebarChat() {
                       <div
                         className={`max-w-[85%] px-3.5 py-2.5 text-sm leading-relaxed ${
                           isUser
-                            ? "rounded-2xl rounded-br-md bg-blue-600 text-white"
-                            : "rounded-2xl rounded-bl-md bg-zinc-200 text-zinc-900"
+                            ? "rounded-2xl rounded-br-md bg-primary text-primary-foreground"
+                            : "rounded-2xl rounded-bl-md bg-muted text-foreground"
                         }`}
                       >
                         <p className="whitespace-pre-wrap">{msg.content || "..."}</p>
@@ -326,7 +326,7 @@ export default function SidebarChat() {
                           <CitationsDropdown citations={msg.citations} messageId={msg.id} />
                         )}
                       </div>
-                      <span className="mt-1 px-1 text-[10px] text-zinc-400">
+                      <span className="mt-1 px-1 text-[10px] text-muted-foreground">
                         {formatTime(msg.timestamp)}
                       </span>
                     </motion.div>
@@ -341,7 +341,7 @@ export default function SidebarChat() {
                   transition={{ duration: 0.3, ease: "easeOut" }}
                   className="flex items-start"
                 >
-                  <div className="rounded-2xl rounded-bl-md bg-zinc-200 px-3.5 py-2.5 text-sm text-zinc-500">
+                  <div className="rounded-2xl rounded-bl-md bg-muted px-3.5 py-2.5 text-sm text-muted-foreground">
                     <span className="inline-flex gap-1">
                       <span className="animate-bounce">.</span>
                       <span className="animate-bounce [animation-delay:0.15s]">.</span>
@@ -357,8 +357,8 @@ export default function SidebarChat() {
         </div>
 
         {/* Input area */}
-        <div className="border-t border-zinc-200 bg-white px-3 py-3">
-          {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
+        <div className="border-t border-border bg-card px-3 py-3">
+          {error && <p className="mb-2 text-xs text-destructive">{error}</p>}
           <div className="flex items-end gap-2">
             <textarea
               ref={textareaRef}
@@ -368,13 +368,13 @@ export default function SidebarChat() {
               placeholder="Ask about your documents..."
               rows={1}
               disabled={isSending}
-              className="min-h-[40px] flex-1 resize-none rounded-xl border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-blue-500 disabled:opacity-60"
+              className="min-h-[40px] flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring disabled:opacity-60"
             />
             <button
               type="button"
               onClick={handleSend}
               disabled={isSending || input.trim().length === 0}
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600"
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:hover:bg-primary"
               aria-label="Send"
             >
               <svg

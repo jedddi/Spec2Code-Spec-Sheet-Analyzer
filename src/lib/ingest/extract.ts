@@ -1,6 +1,6 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import "pdf-parse/worker";
 import { PDFParse } from "pdf-parse";
-import { supabaseAdmin } from "../supabase/server";
 
 const BUCKET_NAME = "Spec-sheets";
 
@@ -8,9 +8,13 @@ const BUCKET_NAME = "Spec-sheets";
  * Download a PDF from Supabase Storage and return its extracted text.
  *
  * @param storagePath - Object path inside the bucket (e.g. "uploads/uuid-file.pdf")
+ * @param supabase - Server client with the caller's session (so storage RLS policies apply correctly).
  */
-export async function extractTextFromPdf(storagePath: string): Promise<string> {
-  const { data, error } = await supabaseAdmin.storage
+export async function extractTextFromPdf(
+  storagePath: string,
+  supabase: SupabaseClient,
+): Promise<string> {
+  const { data, error } = await supabase.storage
     .from(BUCKET_NAME)
     .download(storagePath);
 

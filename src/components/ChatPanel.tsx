@@ -37,7 +37,7 @@ function CitationsDropdown({ citations, messageId }: { citations: Citation[]; me
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-50"
+        className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-card px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
       >
         <svg
           className={`h-3.5 w-3.5 transition-transform ${isOpen ? "rotate-90" : ""}`}
@@ -56,15 +56,15 @@ function CitationsDropdown({ citations, messageId }: { citations: Citation[]; me
           {citations.map((citation, idx) => (
             <li
               key={`${messageId}-cit-${idx}`}
-              className="rounded-lg border border-blue-200 bg-white px-3 py-2"
+              className="rounded-lg border border-primary/25 bg-card px-3 py-2"
             >
-              <p className="text-xs font-semibold text-blue-800">
+              <p className="text-xs font-semibold text-primary">
                 {cleanFilename(citation.document_path)}
               </p>
-              <p className="mt-1 text-xs leading-5 text-zinc-600">
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 {citation.preview}
               </p>
-              <p className="mt-1 text-[10px] text-zinc-400">
+              <p className="mt-1 text-[10px] text-muted-foreground">
                 Similarity: {citation.similarity}
               </p>
             </li>
@@ -210,10 +210,10 @@ export default function ChatPanel() {
 
   return (
     <section className="mx-auto flex h-full w-full max-w-4xl flex-col">
-      <div className="flex-1 space-y-4 overflow-y-auto rounded-xl border-2 border-blue-500/60 bg-white p-4">
+      <div className="flex-1 space-y-4 overflow-y-auto rounded-xl border-2 border-primary/50 bg-card p-4">
         {!hasMessages ? (
-          <div className="flex h-full min-h-64 items-center justify-center rounded-lg border border-dashed border-blue-300 bg-blue-50/40 p-6 text-center">
-            <p className="max-w-lg text-sm text-zinc-600">
+          <div className="flex h-full min-h-64 items-center justify-center rounded-lg border border-dashed border-primary/35 bg-primary/5 p-6 text-center">
+            <p className="max-w-lg text-sm text-muted-foreground">
               Ask a question about your uploaded files. Answers are grounded in retrieved
               document chunks from Supabase.
             </p>
@@ -227,8 +227,8 @@ export default function ChatPanel() {
               key={message.id}
               className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-6 ${
                 isUser
-                  ? "ml-auto bg-blue-600 text-white"
-                  : "mr-auto border border-blue-200 bg-blue-50 text-zinc-900"
+                  ? "ml-auto bg-primary text-primary-foreground"
+                  : "mr-auto border border-primary/25 bg-primary/10 text-foreground"
               }`}
             >
               <p className="whitespace-pre-wrap">{message.content || "..."}</p>
@@ -241,7 +241,7 @@ export default function ChatPanel() {
         })}
 
         {isWaitingForFirstToken ? (
-          <p className="text-sm font-medium text-blue-600 animate-pulse">Thinking...</p>
+          <p className="text-sm font-medium text-primary animate-pulse">Thinking...</p>
         ) : null}
 
         <div ref={messageEndRef} />
@@ -249,7 +249,7 @@ export default function ChatPanel() {
 
       <form
         onSubmit={submitQuestion}
-        className="sticky bottom-0 mt-4 rounded-xl border border-blue-300 bg-white p-3 shadow-sm"
+        className="sticky bottom-0 mt-4 rounded-xl border border-border bg-card p-3 shadow-sm"
       >
         <div className="flex items-end gap-3">
           <textarea
@@ -257,20 +257,20 @@ export default function ChatPanel() {
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Ask a question about your uploaded documents..."
             rows={2}
-            className="min-h-12 flex-1 resize-y rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-blue-500"
+            className="min-h-12 flex-1 resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors focus-visible:border-ring"
             disabled={isSending}
           />
 
           <button
             type="submit"
             disabled={isSending || query.trim().length === 0}
-            className="rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-60 disabled:hover:bg-blue-600"
+            className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 disabled:hover:bg-primary"
           >
             {isSending ? "Sending..." : "Send"}
           </button>
         </div>
 
-        {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
       </form>
     </section>
   );

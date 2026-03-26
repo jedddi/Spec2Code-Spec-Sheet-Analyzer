@@ -40,21 +40,21 @@ export default function CodeModal({ code, fileName, onClose }: CodeModalProps) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-blue-300 bg-white shadow-xl">
+      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-sm font-semibold text-zinc-900">
+            <h3 className="truncate text-sm font-semibold text-foreground">
               Generated C++ Header
             </h3>
-            <p className="truncate text-xs text-zinc-500">{fileName}</p>
+            <p className="truncate text-xs text-muted-foreground">{fileName}</p>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={copyToClipboard}
-              className="rounded-full border border-blue-400 px-3 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50"
+              className="rounded-full border border-primary/40 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
             >
               {copied ? "Copied!" : "Copy"}
             </button>
@@ -62,7 +62,7 @@ export default function CodeModal({ code, fileName, onClose }: CodeModalProps) {
             <button
               type="button"
               onClick={onClose}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               aria-label="Close"
             >
               <svg
@@ -83,8 +83,8 @@ export default function CodeModal({ code, fileName, onClose }: CodeModalProps) {
         </div>
 
         {/* Code block */}
-        <div className="flex-1 overflow-auto bg-zinc-950 p-5">
-          <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-zinc-100">
+        <div className="flex-1 overflow-auto bg-muted p-5">
+          <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-foreground">
             <code>{code}</code>
           </pre>
         </div>

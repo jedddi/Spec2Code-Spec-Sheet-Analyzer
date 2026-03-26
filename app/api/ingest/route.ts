@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { extractTextFromPdf } from "@/src/lib/ingest/extract";
 import { chunkText } from "@/src/lib/ingest/chunk";
 import { generateEmbeddings } from "@/src/lib/ingest/embed";
-import { supabaseAdmin, createServerSupabase } from "@/src/lib/supabase/server";
+import { createServerSupabase } from "@/src/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const text = await extractTextFromPdf(storagePath);
+    const text = await extractTextFromPdf(storagePath, supabase);
     const chunks = chunkText(text);
 
     if (chunks.length === 0) {
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     );
 
     // Remove any existing chunks for this document (safe re-ingestion)
-    const { error: deleteError } = await supabaseAdmin
+    const { error: deleteError } = await supabase
       .from("document_chunks")
       .delete()
       .eq("document_path", storagePath);
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     const BATCH_SIZE = 500;
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       const batch = rows.slice(i, i + BATCH_SIZE);
-      const { error: insertError } = await supabaseAdmin
+      const { error: insertError } = await supabase
         .from("document_chunks")
         .insert(batch);
 

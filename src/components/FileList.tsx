@@ -1,6 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Delete02Icon, File01Icon } from "@hugeicons/core-free-icons";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
 import { createBrowserSupabase } from "../lib/supabase/client";
 import CodeModal from "./CodeModal";
 import SpecsDrawer from "./SpecsDrawer";
@@ -15,9 +25,19 @@ interface FileEntry {
 
 interface FileListProps {
   refreshKey: number;
+  /** When false, hides Generate Code and Quick Specs (default true). */
+  showGenerateAndSpecs?: boolean;
+  /** Match shadcn sidebar file-tree styling in the sidebar panel. */
+  variant?: "default" | "sidebar";
+  className?: string;
 }
 
-export default function FileList({ refreshKey }: FileListProps) {
+export default function FileList({
+  refreshKey,
+  showGenerateAndSpecs = true,
+  variant = "default",
+  className,
+}: FileListProps) {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +50,7 @@ export default function FileList({ refreshKey }: FileListProps) {
   const [specsFileName, setSpecsFileName] = useState<string>("");
 
   const supabase = createBrowserSupabase();
+  const isSidebar = variant === "sidebar";
 
   const fetchFiles = useCallback(async () => {
     setLoading(true);
@@ -158,85 +179,194 @@ export default function FileList({ refreshKey }: FileListProps) {
   }
 
   function displayName(raw: string) {
-    // Upload path is created as: `${uuid}-${originalFilename}`
-    // UUID contains hyphens too, so we must strip the UUID prefix reliably.
     const uuidPrefix =
       /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(.+)$/i;
     const match = raw.match(uuidPrefix);
     if (match) return match[2];
 
-    // Fallback: if it doesn't match UUID format, show the raw name.
     return raw;
   }
 
-  return (
-    <section className="w-full max-w-xl">
-      <h2 className="text-lg font-semibold text-zinc-900">Uploaded Files</h2>
+  const statusText = (msg: string) =>
+    isSidebar ? (
+      <p className="px-2 py-2 text-sm text-sidebar-foreground/70">{msg}</p>
+    ) : (
+      <p className="mt-3 text-sm text-muted-foreground">{msg}</p>
+    );
 
-      {loading ? (
-        <p className="mt-3 text-sm text-zinc-500">Loading files...</p>
-      ) : error ? (
-        <p className="mt-3 text-sm font-medium text-red-600">{error}</p>
-      ) : files.length === 0 ? (
-        <p className="mt-3 text-sm text-zinc-500">
-          No files uploaded yet.
-        </p>
-      ) : (
-        <ul className="mt-3 divide-y divide-zinc-200 rounded-lg border-2 border-blue-500/70">
+  if (loading) {
+    return (
+      <section className={cn(!isSidebar && "w-full max-w-xl", className)}>
+        {!isSidebar && (
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            Uploaded files
+          </h2>
+        )}
+        {statusText("Loading files…")}
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className={cn(!isSidebar && "w-full max-w-xl", className)}>
+        {!isSidebar && (
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            Uploaded files
+          </h2>
+        )}
+        {isSidebar ? (
+          <p className="px-2 py-2 text-sm text-destructive">{error}</p>
+        ) : (
+          <p className="mt-3 text-sm font-medium text-destructive">{error}</p>
+        )}
+      </section>
+    );
+  }
+
+  if (files.length === 0) {
+    return (
+      <section className={cn(!isSidebar && "w-full max-w-xl", className)}>
+        {!isSidebar && (
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            Uploaded files
+          </h2>
+        )}
+        {statusText("No files uploaded yet.")}
+      </section>
+    );
+  }
+
+  if (isSidebar) {
+    return (
+      <section className={cn("w-full", className)}>
+        <SidebarMenu className="gap-0">
           {files.map((file) => (
-            <li
-              key={file.name}
-              className="flex items-center justify-between gap-3 px-4 py-3"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-zinc-900">
-                  {displayName(file.name)}
-                </p>
-                {file.created_at ? (
-                  <p className="text-xs text-zinc-500">
-                    {new Date(file.created_at).toLocaleString()}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="flex shrink-0 gap-2">
-                <button
-                  type="button"
-                  onClick={() => onGenerateCode(file.name)}
-                  disabled={generatingName === file.name}
-                  className="shrink-0 rounded-full border border-blue-400 px-3 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:opacity-50"
-                >
-                  {generatingName === file.name
-                    ? "Generating..."
-                    : "Generate Code"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onQuickSpecs(file.name)}
-                  disabled={specsName === file.name}
-                  className="shrink-0 rounded-full border border-emerald-400 px-3 py-1 text-xs font-medium text-emerald-600 transition-colors hover:bg-emerald-50 disabled:opacity-50"
-                >
-                  {specsName === file.name
-                    ? "Loading..."
-                    : "Quick Specs"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onDelete(file.name)}
-                  disabled={deletingName === file.name}
-                  className="shrink-0 rounded-full border border-red-400 px-3 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
-                >
-                  {deletingName === file.name ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            </li>
+            <SidebarMenuItem key={file.name}>
+              <SidebarMenuButton
+                size="sm"
+                className="h-auto cursor-default gap-2 py-2 pr-8 hover:bg-sidebar-accent"
+              >
+                <HugeiconsIcon
+                  icon={File01Icon}
+                  strokeWidth={2}
+                  className="shrink-0 text-sidebar-foreground/70"
+                />
+                <span className="grid min-w-0 flex-1 text-left leading-tight">
+                  <span className="truncate font-medium text-sidebar-foreground">
+                    {displayName(file.name)}
+                  </span>
+                  {file.created_at ? (
+                    <span className="truncate text-xs text-sidebar-foreground/60">
+                      {new Date(file.created_at).toLocaleString()}
+                    </span>
+                  ) : null}
+                </span>
+              </SidebarMenuButton>
+              <SidebarMenuAction
+                title="Delete file"
+                className="text-sidebar-foreground/80 hover:text-destructive"
+                disabled={deletingName === file.name}
+                onClick={() => onDelete(file.name)}
+              >
+                <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} />
+                <span className="sr-only">Delete</span>
+              </SidebarMenuAction>
+            </SidebarMenuItem>
           ))}
-        </ul>
-      )}
+        </SidebarMenu>
 
-      {generatedCode !== null && (
+        {showGenerateAndSpecs && generatedCode !== null && (
+          <CodeModal
+            code={generatedCode}
+            fileName={modalFileName}
+            onClose={() => {
+              setGeneratedCode(null);
+              setModalFileName("");
+            }}
+          />
+        )}
+
+        {showGenerateAndSpecs && specsContent !== null && (
+          <SpecsDrawer
+            specs={specsContent}
+            fileName={specsFileName}
+            onClose={() => {
+              setSpecsContent(null);
+              setSpecsFileName("");
+            }}
+          />
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <section className={cn("w-full max-w-xl", className)}>
+      <h2 className="text-lg font-semibold tracking-tight text-foreground">
+        Uploaded files
+      </h2>
+
+      <ul className="mt-3 divide-y divide-border rounded-lg border border-border bg-card/40">
+        {files.map((file) => (
+          <li
+            key={file.name}
+            className="flex items-center justify-between gap-3 px-4 py-3"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-foreground">
+                {displayName(file.name)}
+              </p>
+              {file.created_at ? (
+                <p className="text-xs text-muted-foreground">
+                  {new Date(file.created_at).toLocaleString()}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {showGenerateAndSpecs ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    onClick={() => onGenerateCode(file.name)}
+                    disabled={generatingName === file.name}
+                  >
+                    {generatingName === file.name
+                      ? "Generating…"
+                      : "Generate code"}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    onClick={() => onQuickSpecs(file.name)}
+                    disabled={specsName === file.name}
+                  >
+                    {specsName === file.name ? "Loading…" : "Quick specs"}
+                  </Button>
+                </>
+              ) : null}
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className="text-destructive hover:bg-destructive/10"
+                onClick={() => onDelete(file.name)}
+                disabled={deletingName === file.name}
+              >
+                {deletingName === file.name ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {showGenerateAndSpecs && generatedCode !== null && (
         <CodeModal
           code={generatedCode}
           fileName={modalFileName}
@@ -247,7 +377,7 @@ export default function FileList({ refreshKey }: FileListProps) {
         />
       )}
 
-      {specsContent !== null && (
+      {showGenerateAndSpecs && specsContent !== null && (
         <SpecsDrawer
           specs={specsContent}
           fileName={specsFileName}

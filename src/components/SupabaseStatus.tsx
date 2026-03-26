@@ -54,11 +54,11 @@ export default function SupabaseStatus() {
 
   return (
     <section className="mt-10 w-full max-w-xl">
-      <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+      <h2 className="text-lg font-semibold text-foreground">
         Supabase Connection Check
       </h2>
 
-      <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
         Click the button to verify Storage access and reveal your bucket name(s).
       </p>
 
@@ -66,7 +66,7 @@ export default function SupabaseStatus() {
         type="button"
         onClick={listBuckets}
         disabled={loading}
-        className="mt-4 inline-flex items-center rounded-full bg-black px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-60"
+        className="mt-4 inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
       >
         {loading ? "Loading..." : "List Storage Buckets"}
       </button>
@@ -75,40 +75,40 @@ export default function SupabaseStatus() {
         type="button"
         onClick={listBucketRoot}
         disabled={bucketListLoading}
-        className="mt-3 inline-flex items-center rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-60"
+        className="mt-3 inline-flex items-center rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-60"
       >
         {bucketListLoading ? "Loading..." : `List ${bucketToTest} root`}
       </button>
 
       {errorMessage ? (
-        <p className="mt-3 text-sm font-medium text-red-600 dark:text-red-400">
+        <p className="mt-3 text-sm font-medium text-destructive">
           {errorMessage}
         </p>
       ) : null}
 
       {bucketNames ? (
         <div className="mt-4">
-          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+          <p className="text-sm font-medium text-foreground">
             Buckets:
           </p>
-          <pre className="mt-2 overflow-auto rounded-lg bg-zinc-100 p-3 text-xs text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">
+          <pre className="mt-2 overflow-auto rounded-lg bg-muted p-3 text-xs text-foreground">
             {JSON.stringify(bucketNames, null, 2)}
           </pre>
         </div>
       ) : null}
 
       {bucketListError ? (
-        <p className="mt-3 text-sm font-medium text-red-600 dark:text-red-400">
+        <p className="mt-3 text-sm font-medium text-destructive">
           Bucket test error: {bucketListError}
         </p>
       ) : null}
 
       {bucketListResult ? (
         <div className="mt-4">
-          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+          <p className="text-sm font-medium text-foreground">
             Files in `{bucketToTest}/`:
           </p>
-          <pre className="mt-2 overflow-auto rounded-lg bg-zinc-100 p-3 text-xs text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">
+          <pre className="mt-2 overflow-auto rounded-lg bg-muted p-3 text-xs text-foreground">
             {JSON.stringify(bucketListResult, null, 2)}
           </pre>
         </div>

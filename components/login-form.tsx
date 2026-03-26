@@ -91,7 +91,7 @@ export function LoginForm({
         {message ? (
           <p
             role="status"
-            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-sm text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100"
+            className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-center text-sm text-foreground"
           >
             {message}
           </p>
