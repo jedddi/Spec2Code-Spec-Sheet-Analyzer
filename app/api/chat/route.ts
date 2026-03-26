@@ -4,7 +4,7 @@ import { searchDocuments } from "@/src/lib/retrieval/search";
 
 export const runtime = "nodejs";
 
-const CHAT_MODEL = "gemini-2.5-flash";
+const CHAT_MODEL = "gemini-3.1-flash-lite-preview";
 const DEFAULT_TOP_K = 6;
 
 const UUID_PREFIX_RE =
