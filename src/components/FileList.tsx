@@ -6,14 +6,19 @@ import { Delete02Icon, File01Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   SidebarMenu,
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { useDocumentChatContext } from "@/src/contexts/document-chat-context";
 import { createBrowserSupabase } from "../lib/supabase/client";
-import CodeModal from "./CodeModal";
-import SpecsDrawer from "./SpecsDrawer";
 
 const BUCKET_NAME = "Spec-sheets";
 const FOLDER = "uploads";
@@ -25,8 +30,6 @@ interface FileEntry {
 
 interface FileListProps {
   refreshKey: number;
-  /** When false, hides Generate Code and Quick Specs (default true). */
-  showGenerateAndSpecs?: boolean;
   /** Match shadcn sidebar file-tree styling in the sidebar panel. */
   variant?: "default" | "sidebar";
   className?: string;
@@ -34,7 +37,6 @@ interface FileListProps {
 
 export default function FileList({
   refreshKey,
-  showGenerateAndSpecs = true,
   variant = "default",
   className,
 }: FileListProps) {
@@ -43,13 +45,10 @@ export default function FileList({
   const [error, setError] = useState<string | null>(null);
   const [deletingName, setDeletingName] = useState<string | null>(null);
   const [generatingName, setGeneratingName] = useState<string | null>(null);
-  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
-  const [modalFileName, setModalFileName] = useState<string>("");
   const [specsName, setSpecsName] = useState<string | null>(null);
-  const [specsContent, setSpecsContent] = useState<string | null>(null);
-  const [specsFileName, setSpecsFileName] = useState<string>("");
 
   const supabase = createBrowserSupabase();
+  const { appendAssistantMessage } = useDocumentChatContext();
   const isSidebar = variant === "sidebar";
 
   const fetchFiles = useCallback(async () => {
@@ -128,8 +127,14 @@ export default function FileList({
         return;
       }
 
-      setGeneratedCode(result.code as string);
-      setModalFileName(displayName(fileName));
+      if (typeof result.code !== "string" || !result.code.trim()) {
+        alert("Code generation failed: Empty code response");
+        return;
+      }
+
+      appendAssistantMessage(
+        `### Generated C++ Header\n**File:** ${displayName(fileName)}\n\n\`\`\`cpp\n${result.code}\n\`\`\``,
+      );
     } catch (err) {
       alert(
         `Code generation failed: ${err instanceof Error ? err.message : "Unknown error"}`,
@@ -167,8 +172,14 @@ export default function FileList({
         return;
       }
 
-      setSpecsContent(result.specs as string);
-      setSpecsFileName(displayName(fileName));
+      if (typeof result.specs !== "string" || !result.specs.trim()) {
+        alert("Quick Specs failed: Empty specs response");
+        return;
+      }
+
+      appendAssistantMessage(
+        `### Quick specs\n**File:** ${displayName(fileName)}\n\n${result.specs}`,
+      );
     } catch (err) {
       alert(
         `Quick Specs failed: ${err instanceof Error ? err.message : "Unknown error"}`,
@@ -243,26 +254,44 @@ export default function FileList({
         <SidebarMenu className="gap-0">
           {files.map((file) => (
             <SidebarMenuItem key={file.name}>
-              <SidebarMenuButton
-                size="sm"
-                className="h-auto cursor-default gap-2 py-2 pr-8 hover:bg-sidebar-accent"
-              >
-                <HugeiconsIcon
-                  icon={File01Icon}
-                  strokeWidth={2}
-                  className="shrink-0 text-sidebar-foreground/70"
-                />
-                <span className="grid min-w-0 flex-1 text-left leading-tight">
-                  <span className="truncate font-medium text-sidebar-foreground">
-                    {displayName(file.name)}
-                  </span>
-                  {file.created_at ? (
-                    <span className="truncate text-xs text-sidebar-foreground/60">
-                      {new Date(file.created_at).toLocaleString()}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton
+                    size="sm"
+                    className="h-auto cursor-pointer gap-2 py-2 pr-8 hover:bg-sidebar-accent"
+                  >
+                    <HugeiconsIcon
+                      icon={File01Icon}
+                      strokeWidth={2}
+                      className="shrink-0 text-sidebar-foreground/70"
+                    />
+                    <span className="grid min-w-0 flex-1 text-left leading-tight">
+                      <span className="truncate font-medium text-sidebar-foreground">
+                        {displayName(file.name)}
+                      </span>
+                      {file.created_at ? (
+                        <span className="truncate text-xs text-sidebar-foreground/60">
+                          {new Date(file.created_at).toLocaleString()}
+                        </span>
+                      ) : null}
                     </span>
-                  ) : null}
-                </span>
-              </SidebarMenuButton>
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-44">
+                  <DropdownMenuItem
+                    disabled={generatingName === file.name}
+                    onClick={() => onGenerateCode(file.name)}
+                  >
+                    {generatingName === file.name ? "Generating…" : "Generate code"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={specsName === file.name}
+                    onClick={() => onQuickSpecs(file.name)}
+                  >
+                    {specsName === file.name ? "Loading…" : "Quick specs"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <SidebarMenuAction
                 title="Delete file"
                 className="text-sidebar-foreground/80 hover:text-destructive"
@@ -275,28 +304,6 @@ export default function FileList({
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
-
-        {showGenerateAndSpecs && generatedCode !== null && (
-          <CodeModal
-            code={generatedCode}
-            fileName={modalFileName}
-            onClose={() => {
-              setGeneratedCode(null);
-              setModalFileName("");
-            }}
-          />
-        )}
-
-        {showGenerateAndSpecs && specsContent !== null && (
-          <SpecsDrawer
-            specs={specsContent}
-            fileName={specsFileName}
-            onClose={() => {
-              setSpecsContent(null);
-              setSpecsFileName("");
-            }}
-          />
-        )}
       </section>
     );
   }
@@ -313,44 +320,39 @@ export default function FileList({
             key={file.name}
             className="flex items-center justify-between gap-3 px-4 py-3"
           >
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground">
-                {displayName(file.name)}
-              </p>
-              {file.created_at ? (
-                <p className="text-xs text-muted-foreground">
-                  {new Date(file.created_at).toLocaleString()}
-                </p>
-              ) : null}
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 cursor-pointer rounded-md p-1 text-left transition-colors hover:bg-muted/60"
+                >
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {displayName(file.name)}
+                  </p>
+                  {file.created_at ? (
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(file.created_at).toLocaleString()}
+                    </p>
+                  ) : null}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-44">
+                <DropdownMenuItem
+                  disabled={generatingName === file.name}
+                  onClick={() => onGenerateCode(file.name)}
+                >
+                  {generatingName === file.name ? "Generating…" : "Generate code"}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={specsName === file.name}
+                  onClick={() => onQuickSpecs(file.name)}
+                >
+                  {specsName === file.name ? "Loading…" : "Quick specs"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              {showGenerateAndSpecs ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    onClick={() => onGenerateCode(file.name)}
-                    disabled={generatingName === file.name}
-                  >
-                    {generatingName === file.name
-                      ? "Generating…"
-                      : "Generate code"}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    onClick={() => onQuickSpecs(file.name)}
-                    disabled={specsName === file.name}
-                  >
-                    {specsName === file.name ? "Loading…" : "Quick specs"}
-                  </Button>
-                </>
-              ) : null}
-
+            <div className="flex shrink-0 items-center">
               <Button
                 type="button"
                 variant="ghost"
@@ -365,28 +367,6 @@ export default function FileList({
           </li>
         ))}
       </ul>
-
-      {showGenerateAndSpecs && generatedCode !== null && (
-        <CodeModal
-          code={generatedCode}
-          fileName={modalFileName}
-          onClose={() => {
-            setGeneratedCode(null);
-            setModalFileName("");
-          }}
-        />
-      )}
-
-      {showGenerateAndSpecs && specsContent !== null && (
-        <SpecsDrawer
-          specs={specsContent}
-          fileName={specsFileName}
-          onClose={() => {
-            setSpecsContent(null);
-            setSpecsFileName("");
-          }}
-        />
-      )}
     </section>
   );
 }

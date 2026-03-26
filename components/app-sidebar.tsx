@@ -43,7 +43,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <ScrollArea className="min-h-0 flex-1">
                 <FileList
                   refreshKey={refreshKey}
-                  showGenerateAndSpecs={false}
                   variant="sidebar"
                   className="max-w-none pb-2 pr-3"
                 />

@@ -167,6 +167,19 @@ export function useDocumentChat() {
     [input, isSending, submitQuery],
   );
 
+  const appendAssistantMessage = useCallback((content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: trimmed,
+      },
+    ]);
+  }, []);
+
   return {
     messages,
     setMessages,
@@ -176,5 +189,8 @@ export function useDocumentChat() {
     isWaitingForFirstToken,
     handleInputChange,
     handleSubmit,
+    appendAssistantMessage,
   };
 }
+
+export type DocumentChatController = ReturnType<typeof useDocumentChat>;

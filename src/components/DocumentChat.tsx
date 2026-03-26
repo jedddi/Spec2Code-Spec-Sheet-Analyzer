@@ -10,8 +10,8 @@ import {
 import { Chat } from "@/components/ui/chat";
 import { CopyButton } from "@/components/ui/copy-button";
 import type { Message } from "@/components/ui/chat-message";
-import { useDocumentChat } from "@/hooks/use-document-chat";
 import { cn } from "@/lib/utils";
+import { useDocumentChatContext } from "@/src/contexts/document-chat-context";
 
 import { CitationsDropdown } from "./chat-citations";
 
@@ -25,7 +25,7 @@ export default function DocumentChat({ className }: { className?: string }) {
     isWaitingForFirstToken,
     handleInputChange,
     handleSubmit,
-  } = useDocumentChat();
+  } = useDocumentChatContext();
 
   const kitMessages: Message[] = useMemo(
     () =>
