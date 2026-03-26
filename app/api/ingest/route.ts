@@ -33,6 +33,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const userPrefix = `uploads/${user.id}/`;
+  if (!storagePath.startsWith(userPrefix)) {
+    return NextResponse.json(
+      { error: "Forbidden: storagePath is outside your account scope" },
+      { status: 403 },
+    );
+  }
+
   try {
     const text = await extractTextFromPdf(storagePath, supabase);
     const chunks = chunkText(text);
@@ -52,13 +60,15 @@ export async function POST(request: NextRequest) {
     const { error: deleteError } = await supabase
       .from("document_chunks")
       .delete()
-      .eq("document_path", storagePath);
+      .eq("document_path", storagePath)
+      .eq("user_id", user.id);
 
     if (deleteError) {
       throw new Error(`Failed to clear old chunks: ${deleteError.message}`);
     }
 
     const rows = chunks.map((chunk, i) => ({
+      user_id: user.id,
       document_path: storagePath,
       chunk_index: chunk.index,
       content: chunk.content,

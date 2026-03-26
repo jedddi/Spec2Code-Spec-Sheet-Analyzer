@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { createBrowserSupabase } from "../lib/supabase/client";
 
 const BUCKET_NAME = "Spec-sheets";
+const FOLDER = "uploads";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
@@ -45,15 +46,25 @@ export default function UploadPdf({
   const isSidebar = variant === "sidebar";
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [dragging, setDragging] = useState(false);
-  /** Avoid SSR vs client mismatch on `disabled` for the ingest button (e.g. Next hydration warnings). */
-  const [hydrated, setHydrated] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
   const supabase = useMemo(() => createBrowserSupabase(), []);
 
-  useLayoutEffect(() => {
-    setHydrated(true);
-  }, []);
+  useEffect(() => {
+    let active = true;
+
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!active) return;
+      setUserId(user?.id ?? null);
+      setAuthReady(true);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [supabase]);
 
   const updateFile = useCallback(
     (id: string, patch: Partial<FileEntry>) =>
@@ -113,6 +124,7 @@ export default function UploadPdf({
 
   const addFiles = useCallback(
     (fileList: FileList) => {
+      if (!userId) return;
       const newEntries: FileEntry[] = [];
 
       Array.from(fileList).forEach((file) => {
@@ -127,7 +139,7 @@ export default function UploadPdf({
           status: "uploading",
           progress: 0,
           loaded: 0,
-          storagePath: `uploads/${generateId()}-${file.name}`,
+          storagePath: `${FOLDER}/${userId}/${generateId()}-${file.name}`,
         };
         newEntries.push(entry);
       });
@@ -137,8 +149,9 @@ export default function UploadPdf({
       setFiles((prev) => [...prev, ...newEntries]);
       newEntries.forEach((entry) => uploadFileXhr(entry));
     },
-    [uploadFileXhr],
+    [uploadFileXhr, userId],
   );
+  const uploadDisabled = !authReady || !userId;
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -163,27 +176,30 @@ export default function UploadPdf({
     (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      if (uploadDisabled) return;
       dragCounter.current = 0;
       setDragging(false);
       if (e.dataTransfer.files.length > 0) {
         addFiles(e.dataTransfer.files);
       }
     },
-    [addFiles],
+    [addFiles, uploadDisabled],
   );
 
   const handleBrowse = useCallback(() => {
+    if (uploadDisabled) return;
     inputRef.current?.click();
-  }, []);
+  }, [uploadDisabled]);
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (uploadDisabled) return;
       if (e.target.files && e.target.files.length > 0) {
         addFiles(e.target.files);
         e.target.value = "";
       }
     },
-    [addFiles],
+    [addFiles, uploadDisabled],
   );
 
   const hasUploading = files.some((f) => f.status === "uploading");
@@ -198,7 +214,7 @@ export default function UploadPdf({
     hasIngesting ||
     allDone;
 
-  const ingestionButtonDisabled = !hydrated || doneDisabled;
+  const ingestionButtonDisabled = doneDisabled;
 
   async function handleDone() {
     const toIngest = files.filter((f) => f.status === "uploaded");
@@ -326,8 +342,10 @@ export default function UploadPdf({
               <button
                 type="button"
                 onClick={handleBrowse}
+                disabled={uploadDisabled}
                 className={cn(
                   "font-medium underline-offset-4 hover:underline",
+                  uploadDisabled && "cursor-not-allowed opacity-60",
                   isSidebar
                     ? "text-sidebar-primary"
                     : "text-primary",
@@ -344,8 +362,14 @@ export default function UploadPdf({
             accept="application/pdf,.pdf"
             multiple
             onChange={handleInputChange}
+            disabled={uploadDisabled}
             className="sr-only"
           />
+          {authReady && !userId ? (
+            <p className={cn("mt-3 text-center text-xs", mutedText)}>
+              Sign in to upload files.
+            </p>
+          ) : null}
         </div>
 
         {files.length > 0 && (

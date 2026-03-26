@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Delete02Icon, File01Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ import { useDocumentChatContext } from "@/src/contexts/document-chat-context";
 import { createBrowserSupabase } from "../lib/supabase/client";
 
 const BUCKET_NAME = "Spec-sheets";
-const FOLDER = "uploads";
+const ROOT_FOLDER = "uploads";
 
 interface FileEntry {
   name: string;
@@ -43,21 +43,36 @@ export default function FileList({
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [deletingName, setDeletingName] = useState<string | null>(null);
   const [generatingName, setGeneratingName] = useState<string | null>(null);
   const [specsName, setSpecsName] = useState<string | null>(null);
 
-  const supabase = createBrowserSupabase();
+  const supabase = useMemo(() => createBrowserSupabase(), []);
   const { appendAssistantMessage } = useDocumentChatContext();
   const isSidebar = variant === "sidebar";
+  const userFolder = userId ? `${ROOT_FOLDER}/${userId}` : null;
 
   const fetchFiles = useCallback(async () => {
     setLoading(true);
     setError(null);
 
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      setUserId(null);
+      setFiles([]);
+      setLoading(false);
+      setError(userError?.message ?? "You must be signed in to view files.");
+      return;
+    }
+
+    setUserId(user.id);
+
     const { data, error: listError } = await supabase.storage
       .from(BUCKET_NAME)
-      .list(FOLDER, { sortBy: { column: "created_at", order: "desc" } });
+      .list(`${ROOT_FOLDER}/${user.id}`, {
+        sortBy: { column: "created_at", order: "desc" },
+      });
 
     if (listError) {
       setError(listError.message);
@@ -71,20 +86,25 @@ export default function FileList({
     }
 
     setLoading(false);
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     fetchFiles();
   }, [fetchFiles, refreshKey]);
 
   async function onDelete(fileName: string) {
+    if (!userFolder) {
+      alert("You must be signed in to delete files.");
+      return;
+    }
+
     const confirmed = window.confirm(
       `Delete "${fileName}" from storage? This cannot be undone.`,
     );
     if (!confirmed) return;
 
     setDeletingName(fileName);
-    const path = `${FOLDER}/${fileName}`;
+    const path = `${userFolder}/${fileName}`;
 
     const { error: deleteError } = await supabase.storage
       .from(BUCKET_NAME)
@@ -100,8 +120,13 @@ export default function FileList({
   }
 
   async function onGenerateCode(fileName: string) {
+    if (!userFolder) {
+      alert("You must be signed in to generate code.");
+      return;
+    }
+
     setGeneratingName(fileName);
-    const storagePath = `${FOLDER}/${fileName}`;
+    const storagePath = `${userFolder}/${fileName}`;
 
     try {
       const res = await fetch("/api/generate-header", {
@@ -145,8 +170,13 @@ export default function FileList({
   }
 
   async function onQuickSpecs(fileName: string) {
+    if (!userFolder) {
+      alert("You must be signed in to generate quick specs.");
+      return;
+    }
+
     setSpecsName(fileName);
-    const storagePath = `${FOLDER}/${fileName}`;
+    const storagePath = `${userFolder}/${fileName}`;
 
     try {
       const res = await fetch("/api/quick-specs", {

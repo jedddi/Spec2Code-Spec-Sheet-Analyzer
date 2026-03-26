@@ -41,6 +41,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const userPrefix = `uploads/${user.id}/`;
+  if (!storagePath.startsWith(userPrefix)) {
+    return NextResponse.json(
+      { error: "Forbidden: storagePath is outside your account scope" },
+      { status: 403 },
+    );
+  }
+
   const googleApiKey = process.env.GOOGLE_API_KEY;
   if (!googleApiKey) {
     return NextResponse.json(
@@ -53,6 +61,7 @@ export async function POST(request: NextRequest) {
     const { data: chunks, error: queryError } = await supabaseAdmin
       .from("document_chunks")
       .select("content")
+      .eq("user_id", user.id)
       .eq("document_path", storagePath)
       .order("chunk_index", { ascending: true });
 

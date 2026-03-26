@@ -20,6 +20,7 @@ const DEFAULT_SIMILARITY_THRESHOLD = 0.5;
 
 export async function searchDocuments(
   query: string,
+  userId: string,
   topK = DEFAULT_TOP_K,
 ): Promise<SearchDocumentResult[]> {
   const cleanedQuery = query.trim();
@@ -36,12 +37,13 @@ export async function searchDocuments(
     query_embedding: queryEmbedding,
     match_count: topK,
     similarity_threshold: DEFAULT_SIMILARITY_THRESHOLD,
+    owner_id: userId,
   });
 
   if (error) {
     if (error.message.includes("Could not find the function")) {
       throw new Error(
-        "Failed to search document chunks: match_document_chunks RPC is missing. Apply migration 002_match_chunks_function.sql to your Supabase database, then retry.",
+        "Failed to search document chunks: match_document_chunks RPC is missing. Apply the latest Supabase migrations (including 006_match_chunks_user_scope.sql), then retry.",
       );
     }
     throw new Error(`Failed to search document chunks: ${error.message}`);

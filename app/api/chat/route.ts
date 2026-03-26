@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const matches = await searchDocuments(query, DEFAULT_TOP_K);
+    const matches = await searchDocuments(query, user.id, DEFAULT_TOP_K);
 
     const PREVIEW_LENGTH = 200;
     const citations = matches.map((match) => ({
