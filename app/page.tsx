@@ -65,7 +65,7 @@ export default function Home() {
             </div>
           </header>
           <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 md:p-6">
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <DocumentChat className="min-h-0" />
             </div>
           </div>

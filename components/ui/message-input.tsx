@@ -46,6 +46,9 @@ export function MessageInput({
   transcribeAudio,
   ...props
 }: MessageInputProps) {
+  const [isHydrated, setIsHydrated] = useState(false)
+  const normalizedValue =
+    typeof props.value === "string" ? props.value : String(props.value ?? "")
   const [isDragging, setIsDragging] = useState(false)
   const [showInterruptPrompt, setShowInterruptPrompt] = useState(false)
 
@@ -63,6 +66,10 @@ export function MessageInput({
       props.onChange?.({ target: { value: text } } as any)
     },
   })
+
+  useEffect(() => {
+    setIsHydrated(true)
+  }, [])
 
   useEffect(() => {
     if (!isGenerating) {
@@ -143,7 +150,7 @@ export function MessageInput({
           setShowInterruptPrompt(false)
           event.currentTarget.form?.requestSubmit()
         } else if (
-          props.value ||
+          normalizedValue ||
           (props.allowAttachments && props.files?.length)
         ) {
           setShowInterruptPrompt(true)
@@ -164,7 +171,7 @@ export function MessageInput({
     if (textAreaRef.current) {
       setTextAreaHeight(textAreaRef.current.offsetHeight)
     }
-  }, [props.value])
+  }, [normalizedValue])
 
   const showFileList =
     props.allowAttachments && props.files && props.files.length > 0
@@ -173,7 +180,7 @@ export function MessageInput({
     ref: textAreaRef,
     maxHeight: 240,
     borderWidth: 1,
-    dependencies: [props.value, showFileList],
+    dependencies: [normalizedValue, showFileList],
   })
 
   return (
@@ -204,13 +211,14 @@ export function MessageInput({
             onPaste={onPaste}
             onKeyDown={onKeyDown}
             className={cn(
-              "z-10 w-full grow resize-none rounded-xl border border-input bg-background p-3 pr-24 text-sm ring-offset-background transition-[border] placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+              "z-10 w-full grow resize-none rounded-xl border border-input bg-background p-3 pr-24 text-sm shadow-none ring-offset-background transition-[border] placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
               showFileList && "pb-16",
               className
             )}
+            value={normalizedValue}
             {...(props.allowAttachments
-              ? omit(props, ["allowAttachments", "files", "setFiles"])
-              : omit(props, ["allowAttachments"]))}
+              ? omit(props, ["allowAttachments", "files", "setFiles", "value"])
+              : omit(props, ["allowAttachments", "value"]))}
           />
 
           {props.allowAttachments && (
@@ -248,7 +256,7 @@ export function MessageInput({
           <Button
             type="button"
             size="icon"
-            variant="outline"
+            variant="ghost"
             className="h-8 w-8"
             aria-label="Attach a file"
             onClick={async () => {
@@ -262,7 +270,7 @@ export function MessageInput({
         {isSpeechSupported && (
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             className={cn("h-8 w-8", isListening && "text-primary")}
             aria-label="Voice input"
             size="icon"
@@ -287,7 +295,7 @@ export function MessageInput({
             size="icon"
             className="h-8 w-8 transition-opacity"
             aria-label="Send message"
-            disabled={props.value === "" || isGenerating}
+            disabled={isHydrated ? normalizedValue === "" || isGenerating : undefined}
           >
             <ArrowUp className="h-5 w-5" />
           </Button>

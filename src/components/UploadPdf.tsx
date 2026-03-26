@@ -44,6 +44,7 @@ export default function UploadPdf({
   variant = "default",
 }: UploadPdfProps) {
   const isSidebar = variant === "sidebar";
+  const [isHydrated, setIsHydrated] = useState(false);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [dragging, setDragging] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -51,6 +52,10 @@ export default function UploadPdf({
   const inputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
   const supabase = useMemo(() => createBrowserSupabase(), []);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -152,6 +157,8 @@ export default function UploadPdf({
     [uploadFileXhr, userId],
   );
   const uploadDisabled = !authReady || !userId;
+  const uploadDisabledAttr = isHydrated ? uploadDisabled : undefined;
+  const uploadInteractionBlocked = !isHydrated || uploadDisabled;
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -176,30 +183,30 @@ export default function UploadPdf({
     (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (uploadDisabled) return;
+      if (uploadInteractionBlocked) return;
       dragCounter.current = 0;
       setDragging(false);
       if (e.dataTransfer.files.length > 0) {
         addFiles(e.dataTransfer.files);
       }
     },
-    [addFiles, uploadDisabled],
+    [addFiles, uploadInteractionBlocked],
   );
 
   const handleBrowse = useCallback(() => {
-    if (uploadDisabled) return;
+    if (uploadInteractionBlocked) return;
     inputRef.current?.click();
-  }, [uploadDisabled]);
+  }, [uploadInteractionBlocked]);
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (uploadDisabled) return;
+      if (uploadInteractionBlocked) return;
       if (e.target.files && e.target.files.length > 0) {
         addFiles(e.target.files);
         e.target.value = "";
       }
     },
-    [addFiles, uploadDisabled],
+    [addFiles, uploadInteractionBlocked],
   );
 
   const hasUploading = files.some((f) => f.status === "uploading");
@@ -342,10 +349,10 @@ export default function UploadPdf({
               <button
                 type="button"
                 onClick={handleBrowse}
-                disabled={uploadDisabled}
+                disabled={uploadDisabledAttr}
                 className={cn(
                   "font-medium underline-offset-4 hover:underline",
-                  uploadDisabled && "cursor-not-allowed opacity-60",
+                  uploadInteractionBlocked && "cursor-not-allowed opacity-60",
                   isSidebar
                     ? "text-sidebar-primary"
                     : "text-primary",
@@ -362,7 +369,7 @@ export default function UploadPdf({
             accept="application/pdf,.pdf"
             multiple
             onChange={handleInputChange}
-            disabled={uploadDisabled}
+            disabled={uploadDisabledAttr}
             className="sr-only"
           />
           {authReady && !userId ? (
