@@ -1,8 +1,14 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { LayoutBottomIcon } from "@hugeicons/core-free-icons";
+import { LoginForm } from "@/components/login-form";
 import { createBrowserSupabase } from "@/src/lib/supabase/client";
+
+const LOGIN_VIDEO_SRC = "/loginpage_video.mp4";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -13,8 +19,32 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createBrowserSupabase();
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  async function handleSubmit(e: FormEvent) {
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+
+    el.muted = true;
+    el.defaultMuted = true;
+    el.setAttribute("playsinline", "");
+    el.setAttribute("webkit-playsinline", "true");
+
+    const kickPlay = () => {
+      void el.play().catch(() => {});
+    };
+
+    kickPlay();
+    el.addEventListener("canplay", kickPlay);
+    el.addEventListener("loadeddata", kickPlay);
+
+    return () => {
+      el.removeEventListener("canplay", kickPlay);
+      el.removeEventListener("loadeddata", kickPlay);
+    };
+  }, []);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError(null);
@@ -50,83 +80,61 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
-      <div className="w-full max-w-sm">
-        <h1 className="mb-1 text-center text-2xl font-bold text-zinc-900">
-          Spec2Code
-        </h1>
-        <p className="mb-8 text-center text-sm text-zinc-500">
-          {isSignUp ? "Create your account" : "Sign in to continue"}
-        </p>
-
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-lg"
-        >
-          <label className="mb-1 block text-sm font-medium text-zinc-700">
-            Email
-          </label>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="mb-4 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-blue-500"
-            placeholder="you@example.com"
-          />
-
-          <label className="mb-1 block text-sm font-medium text-zinc-700">
-            Password
-          </label>
-          <input
-            type="password"
-            required
-            minLength={6}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mb-6 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-blue-500"
-            placeholder="At least 6 characters"
-          />
-
-          {error && (
-            <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-              {error}
-            </p>
-          )}
-
-          {message && (
-            <p className="mb-4 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
-              {message}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-full bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading
-              ? "Please wait..."
-              : isSignUp
-                ? "Sign Up"
-                : "Sign In"}
-          </button>
-
-          <p className="mt-4 text-center text-sm text-zinc-500">
-            {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
+    <div className="grid min-h-svh grid-rows-1 lg:grid-cols-2">
+      <div className="flex min-h-svh flex-col gap-4 p-6 md:p-10">
+        <div className="flex justify-center gap-2 md:justify-start">
+          <Link href="/" className="flex items-center gap-2 font-medium">
+            <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <HugeiconsIcon
+                icon={LayoutBottomIcon}
+                strokeWidth={2}
+                className="size-4"
+              />
+            </div>
+            Spec2Code
+          </Link>
+        </div>
+        <div className="flex flex-1 items-center justify-center">
+          <div className="w-full max-w-xs">
+            <LoginForm
+              email={email}
+              password={password}
+              onEmailChange={setEmail}
+              onPasswordChange={setPassword}
+              onSubmit={handleSubmit}
+              loading={loading}
+              error={error}
+              message={message}
+              isSignUp={isSignUp}
+              onToggleSignUp={() => {
+                setIsSignUp((v) => !v);
                 setError(null);
                 setMessage(null);
               }}
-              className="font-medium text-blue-600 hover:text-blue-700"
-            >
-              {isSignUp ? "Sign In" : "Sign Up"}
-            </button>
-          </p>
-        </form>
+            />
+          </div>
+        </div>
+      </div>
+      <div className="relative hidden min-h-svh w-full overflow-hidden bg-muted lg:block">
+        <video
+          ref={videoRef}
+          className="absolute inset-0 z-0 h-full w-full min-h-full min-w-full object-cover dark:brightness-[0.55]"
+          src={LOGIN_VIDEO_SRC}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-br from-primary/15 via-transparent to-background/25 dark:from-primary/20 dark:to-background/40"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute inset-0 z-10 opacity-20 [background-image:radial-gradient(circle_at_1px_1px,var(--border)_1px,transparent_0)] [background-size:24px_24px] dark:opacity-12"
+          aria-hidden
+        />
       </div>
     </div>
   );
