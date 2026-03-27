@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Delete02Icon, File01Icon } from "@hugeicons/core-free-icons";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,7 +50,8 @@ export default function FileList({
   const [specsName, setSpecsName] = useState<string | null>(null);
 
   const supabase = useMemo(() => createBrowserSupabase(), []);
-  const { appendAssistantMessage } = useDocumentChatContext();
+  const { appendAssistantMessage, beginGlobalStatus, endGlobalStatus } =
+    useDocumentChatContext();
   const isSidebar = variant === "sidebar";
   const userFolder = userId ? `${ROOT_FOLDER}/${userId}` : null;
 
@@ -126,6 +128,9 @@ export default function FileList({
     }
 
     setGeneratingName(fileName);
+    const statusToken = beginGlobalStatus(
+      `Generating code for ${displayName(fileName)}...`,
+    );
     const storagePath = `${userFolder}/${fileName}`;
 
     try {
@@ -165,6 +170,7 @@ export default function FileList({
         `Code generation failed: ${err instanceof Error ? err.message : "Unknown error"}`,
       );
     } finally {
+      endGlobalStatus(statusToken);
       setGeneratingName(null);
     }
   }
@@ -176,6 +182,9 @@ export default function FileList({
     }
 
     setSpecsName(fileName);
+    const statusToken = beginGlobalStatus(
+      `Generating quick specs for ${displayName(fileName)}...`,
+    );
     const storagePath = `${userFolder}/${fileName}`;
 
     try {
@@ -215,6 +224,7 @@ export default function FileList({
         `Quick Specs failed: ${err instanceof Error ? err.message : "Unknown error"}`,
       );
     } finally {
+      endGlobalStatus(statusToken);
       setSpecsName(null);
     }
   }
@@ -234,6 +244,22 @@ export default function FileList({
     ) : (
       <p className="mt-3 text-sm text-muted-foreground">{msg}</p>
     );
+
+  const isGenerating = (fileName: string) => generatingName === fileName;
+  const isLoadingSpecs = (fileName: string) => specsName === fileName;
+  const isActionPending = (fileName: string) =>
+    isGenerating(fileName) || isLoadingSpecs(fileName);
+
+  const actionLabel = (
+    pending: boolean,
+    pendingText: string,
+    defaultText: string,
+  ) => (
+    <span className="inline-flex items-center gap-2">
+      {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+      <span>{pending ? pendingText : defaultText}</span>
+    </span>
+  );
 
   if (loading) {
     return (
@@ -309,16 +335,24 @@ export default function FileList({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-44">
                   <DropdownMenuItem
-                    disabled={generatingName === file.name}
+                    disabled={isActionPending(file.name)}
                     onClick={() => onGenerateCode(file.name)}
                   >
-                    {generatingName === file.name ? "Generating…" : "Generate code"}
+                    {actionLabel(
+                      isGenerating(file.name),
+                      "Generating…",
+                      "Generate code",
+                    )}
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    disabled={specsName === file.name}
+                    disabled={isActionPending(file.name)}
                     onClick={() => onQuickSpecs(file.name)}
                   >
-                    {specsName === file.name ? "Loading…" : "Quick specs"}
+                    {actionLabel(
+                      isLoadingSpecs(file.name),
+                      "Loading…",
+                      "Quick specs",
+                    )}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -368,16 +402,24 @@ export default function FileList({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-44">
                 <DropdownMenuItem
-                  disabled={generatingName === file.name}
+                  disabled={isActionPending(file.name)}
                   onClick={() => onGenerateCode(file.name)}
                 >
-                  {generatingName === file.name ? "Generating…" : "Generate code"}
+                  {actionLabel(
+                    isGenerating(file.name),
+                    "Generating…",
+                    "Generate code",
+                  )}
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  disabled={specsName === file.name}
+                  disabled={isActionPending(file.name)}
                   onClick={() => onQuickSpecs(file.name)}
                 >
-                  {specsName === file.name ? "Loading…" : "Quick specs"}
+                  {actionLabel(
+                    isLoadingSpecs(file.name),
+                    "Loading…",
+                    "Quick specs",
+                  )}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

@@ -80,6 +80,8 @@ export async function POST(request: NextRequest) {
     const citations = matches.map((match) => ({
       document_path: match.document_path,
       preview: match.content.slice(0, PREVIEW_LENGTH) + (match.content.length > PREVIEW_LENGTH ? "…" : ""),
+      chunk_index: match.chunk_index,
+      page: match.page,
       similarity: Number(match.similarity.toFixed(3)),
     }));
 

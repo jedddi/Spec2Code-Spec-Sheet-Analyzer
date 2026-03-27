@@ -75,7 +75,7 @@ interface ToolResult {
   toolName: string
   result: {
     __cancelled?: boolean
-    [key: string]: any
+    [key: string]: unknown
   }
 }
 
@@ -99,7 +99,7 @@ interface TextPart {
 // For compatibility with AI SDK types, not used
 interface SourcePart {
   type: "source"
-  source?: any
+  source?: unknown
 }
 
 interface FilePart {
@@ -134,6 +134,7 @@ export interface ChatMessageProps extends Message {
   showTimeStamp?: boolean
   animation?: Animation
   actions?: React.ReactNode
+  footer?: React.ReactNode
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
@@ -143,6 +144,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   showTimeStamp = false,
   animation = "scale",
   actions,
+  footer,
   experimental_attachments,
   toolInvocations,
   parts,
@@ -209,6 +211,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           >
             <div className={cn(chatBubbleVariants({ isUser, animation }))}>
               <MarkdownRenderer>{part.text}</MarkdownRenderer>
+              {footer ? <div className="mt-2">{footer}</div> : null}
               {actions ? (
                 <div className="absolute -bottom-4 right-2 flex space-x-1 rounded-lg border bg-background p-1 text-foreground opacity-0 transition-opacity group-hover/message:opacity-100">
                   {actions}
@@ -251,6 +254,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     <div className={cn("flex flex-col", isUser ? "items-end" : "items-start")}>
       <div className={cn(chatBubbleVariants({ isUser, animation }))}>
         <MarkdownRenderer>{content}</MarkdownRenderer>
+        {footer ? <div className="mt-2">{footer}</div> : null}
         {actions ? (
           <div className="absolute -bottom-4 right-2 flex space-x-1 rounded-lg border bg-background p-1 text-foreground opacity-0 transition-opacity group-hover/message:opacity-100">
             {actions}

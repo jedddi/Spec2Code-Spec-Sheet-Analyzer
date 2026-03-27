@@ -5,6 +5,7 @@ type MatchDocumentChunkRow = {
   id: number;
   document_path: string;
   chunk_index: number;
+  page: number | null;
   content: string;
   similarity: number;
 };
@@ -12,6 +13,8 @@ type MatchDocumentChunkRow = {
 export type SearchDocumentResult = {
   content: string;
   document_path: string;
+  chunk_index: number;
+  page: number | null;
   similarity: number;
 };
 
@@ -53,6 +56,8 @@ export async function searchDocuments(
   return rows.map((row) => ({
     content: row.content,
     document_path: row.document_path,
+    chunk_index: row.chunk_index,
+    page: row.page,
     similarity: row.similarity,
   }));
 }

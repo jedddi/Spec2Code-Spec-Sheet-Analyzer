@@ -5,6 +5,8 @@ import { useCallback, useRef, useState } from "react";
 export type Citation = {
   document_path: string;
   preview: string;
+  chunk_index: number;
+  page: number | null;
   similarity: number;
 };
 
@@ -21,7 +23,9 @@ export function useDocumentChat() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isWaitingForFirstToken, setIsWaitingForFirstToken] = useState(false);
+  const [globalStatus, setGlobalStatus] = useState<string | null>(null);
   const inFlightRef = useRef(false);
+  const globalStatusTokenRef = useRef(0);
 
   const handleInputChange: React.ChangeEventHandler<HTMLTextAreaElement> =
     useCallback((e) => {
@@ -66,7 +70,10 @@ export function useDocumentChat() {
                   typeof item === "object" &&
                   item !== null &&
                   typeof (item as Citation).document_path === "string" &&
-                  typeof (item as Citation).preview === "string",
+                typeof (item as Citation).preview === "string" &&
+                typeof (item as Citation).chunk_index === "number" &&
+                (((item as Citation).page === null) ||
+                  typeof (item as Citation).page === "number"),
               );
             }
           } catch {
@@ -155,8 +162,9 @@ export function useDocumentChat() {
   const handleSubmit = useCallback(
     (
       event?: { preventDefault?: () => void },
-      _options?: { experimental_attachments?: FileList },
+      options?: { experimental_attachments?: FileList },
     ) => {
+      void options;
       event?.preventDefault?.();
       if (isSending) return;
       const trimmed = input.trim();
@@ -180,6 +188,21 @@ export function useDocumentChat() {
     ]);
   }, []);
 
+  const beginGlobalStatus = useCallback((message: string) => {
+    const trimmed = message.trim();
+    if (!trimmed) return null;
+    globalStatusTokenRef.current += 1;
+    const token = globalStatusTokenRef.current;
+    setGlobalStatus(trimmed);
+    return token;
+  }, []);
+
+  const endGlobalStatus = useCallback((token: number | null) => {
+    if (token === null) return;
+    if (globalStatusTokenRef.current !== token) return;
+    setGlobalStatus(null);
+  }, []);
+
   return {
     messages,
     setMessages,
@@ -187,9 +210,12 @@ export function useDocumentChat() {
     isSending,
     error,
     isWaitingForFirstToken,
+    globalStatus,
     handleInputChange,
     handleSubmit,
     appendAssistantMessage,
+    beginGlobalStatus,
+    endGlobalStatus,
   };
 }
 

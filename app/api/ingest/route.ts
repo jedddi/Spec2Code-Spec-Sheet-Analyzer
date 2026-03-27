@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractTextFromPdf } from "@/src/lib/ingest/extract";
-import { chunkText } from "@/src/lib/ingest/chunk";
+import { extractPagesFromPdf } from "@/src/lib/ingest/extract";
+import { chunkPageText } from "@/src/lib/ingest/chunk";
 import { generateEmbeddings } from "@/src/lib/ingest/embed";
 import { createServerSupabase } from "@/src/lib/supabase/server";
 
@@ -42,8 +42,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const text = await extractTextFromPdf(storagePath, supabase);
-    const chunks = chunkText(text);
+    const pages = await extractPagesFromPdf(storagePath, supabase);
+    const chunks = chunkPageText(pages);
 
     if (chunks.length === 0) {
       return NextResponse.json(
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       chunk_index: chunk.index,
       content: chunk.content,
       embedding: JSON.stringify(embeddings[i]),
-      metadata: {},
+      metadata: { page: chunk.page },
     }));
 
     // Insert in batches of 500 to avoid payload limits

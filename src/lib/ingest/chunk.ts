@@ -3,6 +3,15 @@ export interface Chunk {
   index: number;
 }
 
+export interface ChunkWithPage extends Chunk {
+  page: number;
+}
+
+export interface PageTextInput {
+  page: number;
+  text: string;
+}
+
 const DEFAULT_CHUNK_SIZE = 1000;
 const DEFAULT_CHUNK_OVERLAP = 200;
 
@@ -93,6 +102,35 @@ export function chunkText(
           rawPieces[i + 1] = merged;
         }
       }
+    }
+  }
+
+  return chunks;
+}
+
+/**
+ * Split page-grouped text into chunks while preserving source page number.
+ */
+export function chunkPageText(
+  pages: PageTextInput[],
+  chunkSize = DEFAULT_CHUNK_SIZE,
+  overlap = DEFAULT_CHUNK_OVERLAP,
+): ChunkWithPage[] {
+  const chunks: ChunkWithPage[] = [];
+  let globalIndex = 0;
+
+  for (const pageEntry of pages) {
+    const pageText = pageEntry.text.trim();
+    if (!pageText) continue;
+
+    const pageChunks = chunkText(pageText, chunkSize, overlap);
+    for (const chunk of pageChunks) {
+      chunks.push({
+        content: chunk.content,
+        index: globalIndex,
+        page: pageEntry.page,
+      });
+      globalIndex += 1;
     }
   }
 
