@@ -63,7 +63,7 @@ export default function ChatPage() {
           />
         )}
 
-        <div className="shrink-0 border-t border-[#e5e5e5]/50 px-4 pb-4 pt-3">
+        <div className="shrink-0 px-4 pb-4 pt-3">
           <PromptInputV2
             value={chat.input}
             onChange={chat.handleInputChange}

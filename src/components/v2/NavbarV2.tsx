@@ -9,7 +9,7 @@ interface NavbarV2Props {
 
 export default function NavbarV2({ mockMode, onToggleMock }: NavbarV2Props) {
   return (
-    <header className="sticky top-0 z-10 flex h-[81px] shrink-0 items-center bg-white px-5">
+    <header className="sticky top-0 z-10 flex h-[81px] shrink-0 items-center bg-transparent px-5">
       {/* Left: title */}
       <div className="min-w-0 shrink-0">
         <p className="text-xl font-semibold leading-7 text-[#111]">

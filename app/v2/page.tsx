@@ -93,7 +93,7 @@ export default function V2Page() {
               isWaitingForFirstToken={chat.isWaitingForFirstToken}
             />
 
-            <div className="shrink-0 border-t border-[#e5e5e5]/50 px-4 pb-4 pt-3">
+            <div className="shrink-0 px-4 pb-4 pt-3">
               <motion.div layoutId="prompt-input">
                 <PromptInputV2
                   value={chat.input}
