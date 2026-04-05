@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
 import NavbarV2 from "@/src/components/v2/NavbarV2";
@@ -10,7 +10,7 @@ import { useChatV2 } from "@/src/hooks/useChatV2";
 import { useAuth } from "@/src/hooks/useAuth";
 import { useChatSessions } from "@/src/hooks/useChatSessions";
 
-export default function ChatPage() {
+function ChatPageContent() {
   const searchParams = useSearchParams();
   const chatId = searchParams.get("id");
   const mockParam = searchParams.get("mock");
@@ -34,14 +34,12 @@ export default function ChatPage() {
       <NavbarV2 mockMode={mockMode} onToggleMock={setMockMode} />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {/* Loading history */}
         {chat.isLoadingHistory && (
           <div className="flex flex-1 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-[var(--v2-primary)]" />
           </div>
         )}
 
-        {/* Lightweight greeting when session is empty and not loading */}
         {!chat.isLoadingHistory && !chat.isActive && (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl border-2 border-[var(--v2-primary)] bg-[var(--v2-primary)]">
@@ -73,5 +71,19 @@ export default function ChatPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-[var(--v2-primary)]" />
+        </div>
+      }
+    >
+      <ChatPageContent />
+    </Suspense>
   );
 }

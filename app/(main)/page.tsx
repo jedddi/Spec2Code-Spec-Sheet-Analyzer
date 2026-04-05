@@ -24,7 +24,7 @@ const DEFAULT_PROMPTS = [
   },
 ];
 
-export default function V2Page() {
+export default function HomePage() {
   const router = useRouter();
   const { user } = useAuth();
   const { createSession, refetch: refetchSessions } = useChatSessions(user?.id);

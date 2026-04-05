@@ -309,14 +309,14 @@ export function useChatV2({
           if (redirectOnly && sid && router) {
             const params = new URLSearchParams({ id: sid });
             if (mockMode) params.set("mock", "1");
-            router.push(`/v2/chat?${params.toString()}`);
+            router.push(`/chat?${params.toString()}`);
             return;
           }
 
           // If we created a session from a non-redirectOnly page (shouldn't
           // happen normally), still redirect but continue streaming
           if (sid && router && !sessionId) {
-            router.push(`/v2/chat?id=${sid}`);
+            router.push(`/chat?id=${sid}`);
           }
 
           if (!sid) {

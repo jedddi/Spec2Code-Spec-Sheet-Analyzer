@@ -16,7 +16,7 @@ export default function ChatPage() {
             <div className="flex items-center gap-2">
               <ModeToggle />
               <Link
-                href="/"
+                href="/v1"
                 className="rounded-full border border-primary px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
               >
                 Back to uploads

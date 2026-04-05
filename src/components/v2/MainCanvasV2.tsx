@@ -15,7 +15,7 @@ export default function MainCanvasV2({
   className,
 }: MainCanvasV2Props) {
   const pathname = usePathname();
-  const isHome = pathname === "/v2";
+  const isHome = pathname === "/";
 
   return (
     <main

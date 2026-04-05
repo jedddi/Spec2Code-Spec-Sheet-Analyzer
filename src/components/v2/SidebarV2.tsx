@@ -10,10 +10,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Archive,
   ArrowLeftRight,
-  BarChart3,
   Ellipsis,
+  LayoutDashboard,
   Loader2,
   PanelLeftClose,
   PenSquare,
@@ -44,20 +43,14 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: "New Chat",
     icon: PenSquare,
-    href: "/v2",
-    match: (p) => p === "/v2",
+    href: "/",
+    match: (p) => p === "/",
   },
   {
-    label: "AI Performance",
-    icon: BarChart3,
-    href: "/v2/performance",
-    match: (p) => p.startsWith("/v2/performance"),
-  },
-  {
-    label: "Library",
-    icon: Archive,
-    href: "/v2/library",
-    match: (p) => p.startsWith("/v2/library"),
+    label: "Overview",
+    icon: LayoutDashboard,
+    href: "/overview",
+    match: (p) => p.startsWith("/overview"),
   },
 ];
 
@@ -348,7 +341,7 @@ export default function SidebarV2() {
                             <button
                               type="button"
                               onClick={() =>
-                                router.push(`/v2/chat?id=${session.id}`)
+                                router.push(`/chat?id=${session.id}`)
                               }
                               className="min-w-0 flex-1 truncate text-left text-xs font-medium leading-5 text-white transition-colors hover:text-white/70"
                             >
@@ -413,7 +406,7 @@ export default function SidebarV2() {
                     ))}
                     {files.length > 8 && (
                       <Link
-                        href="/v2/library"
+                        href="/overview"
                         className="block text-xs text-[var(--v2-primary)] hover:underline"
                       >
                         +{files.length - 8} more
@@ -438,9 +431,9 @@ export default function SidebarV2() {
           <Tooltip>
             <TooltipTrigger asChild>
               <Link
-                href="/v2/settings"
+                href="/settings"
                 className={`mb-3 flex w-full items-center justify-center py-2 transition-colors ${
-                  pathname.startsWith("/v2/settings")
+                  pathname.startsWith("/settings")
                     ? "text-white"
                     : "text-white/80 hover:text-white"
                 }`}
@@ -454,9 +447,9 @@ export default function SidebarV2() {
           </Tooltip>
         ) : (
           <Link
-            href="/v2/settings"
+            href="/settings"
             className={`mb-3 flex w-full items-center gap-3 pb-3 text-left text-base transition-colors ${
-              pathname.startsWith("/v2/settings")
+              pathname.startsWith("/settings")
                 ? "text-white"
                 : "text-white/80 hover:text-white"
             }`}
@@ -478,7 +471,7 @@ export default function SidebarV2() {
               className="overflow-hidden"
             >
               <Link
-                href="/"
+                href="/v1"
                 className="mb-3 flex w-full items-center gap-3 border-b border-white/20 pb-3 text-left text-xs text-white/50 transition-colors hover:text-white/80"
               >
                 <ArrowLeftRight className="h-4 w-4" />
