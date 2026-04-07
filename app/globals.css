@@ -8,6 +8,10 @@
   --v2-primary: #0386fd;
   --v2-sidebar-bg: #040404;
   --v2-glow: rgba(99, 181, 255, 0.6);
+  --dm-surface: #09090b;
+  --dm-panel: #111114;
+  --dm-border: rgba(255, 255, 255, 0.1);
+  --dm-active: #3b82f6;
   --background: oklch(1 0 0);
   --foreground: oklch(0.148 0.004 228.8);
   --card: oklch(1 0 0);
@@ -209,6 +213,21 @@ body {
   }
   .scrollbar-none::-webkit-scrollbar {
     display: none;
+  }
+
+  .dm-glass-overlay {
+    background: rgba(9, 9, 11, 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .dm-panel {
+    background: linear-gradient(180deg, rgba(16, 16, 20, 0.92), rgba(11, 11, 14, 0.92));
+    border: 1px solid var(--dm-border);
+  }
+
+  .dm-focus-ring {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
   }
 }
 

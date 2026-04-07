@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { createBrowserSupabase } from "../lib/supabase/client";
+import { CloudUpload } from "lucide-react";
 
 const BUCKET_NAME = "Spec-sheets";
 const FOLDER = "uploads";
@@ -23,8 +24,18 @@ interface FileEntry {
 
 interface UploadPdfProps {
   onUploadComplete?: () => void;
+  /** When true, ingestion starts automatically after upload (no manual button). */
+  autoIngest?: boolean;
   /** Tighter layout for narrow sidebar panels. */
   variant?: "default" | "sidebar";
+  /** Light-themed drop zone when using `variant="sidebar"` (e.g. datasheet manager). */
+  embedLight?: boolean;
+  /** Initial files prepopulated (e.g. from a parent drop event). */
+  initialFiles?: File[] | null;
+  /** Optional project assignment for ingested documents. */
+  projectName?: string;
+  /** Optional tag hints for ingested documents. */
+  tags?: string[];
 }
 
 function generateId(): string {
@@ -41,10 +52,14 @@ function formatBytes(bytes: number): string {
 
 export default function UploadPdf({
   onUploadComplete,
+  autoIngest = false,
   variant = "default",
+  embedLight = false,
+  initialFiles = null,
+  projectName,
+  tags = [],
 }: UploadPdfProps) {
   const isSidebar = variant === "sidebar";
-  const [isHydrated, setIsHydrated] = useState(false);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [dragging, setDragging] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -52,10 +67,6 @@ export default function UploadPdf({
   const inputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
   const supabase = useMemo(() => createBrowserSupabase(), []);
-
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -128,7 +139,7 @@ export default function UploadPdf({
   );
 
   const addFiles = useCallback(
-    (fileList: FileList) => {
+    (fileList: FileList | File[]) => {
       if (!userId) return;
       const newEntries: FileEntry[] = [];
 
@@ -156,9 +167,85 @@ export default function UploadPdf({
     },
     [uploadFileXhr, userId],
   );
+
+  const initialFilesAddedRef = useRef(false);
+
+  useEffect(() => {
+    if (initialFiles && initialFiles.length > 0 && userId && !initialFilesAddedRef.current) {
+      initialFilesAddedRef.current = true;
+      const id = window.setTimeout(() => addFiles(initialFiles), 0);
+      return () => window.clearTimeout(id);
+    }
+  }, [initialFiles, userId, addFiles]);
+
   const uploadDisabled = !authReady || !userId;
-  const uploadDisabledAttr = isHydrated ? uploadDisabled : undefined;
-  const uploadInteractionBlocked = !isHydrated || uploadDisabled;
+  const uploadDisabledAttr = uploadDisabled;
+  const uploadInteractionBlocked = uploadDisabled;
+
+  // Auto-ingest: when a file transitions to "uploaded", start ingestion immediately
+  const autoIngestTriggeredRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!autoIngest) return;
+    const ready = files.filter(
+      (f) => f.status === "uploaded" && !autoIngestTriggeredRef.current.has(f.id),
+    );
+    if (ready.length === 0) return;
+
+    ready.forEach((f) => autoIngestTriggeredRef.current.add(f.id));
+
+    ready.forEach((f) => updateFile(f.id, { status: "ingesting" }));
+
+    void Promise.all(
+      ready.map(async (entry) => {
+        try {
+          const res = await fetch("/api/ingest", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              storagePath: entry.storagePath,
+              projectName,
+              tags,
+            }),
+          });
+
+          const text = await res.text();
+          let result: Record<string, unknown>;
+          try {
+            result = JSON.parse(text);
+          } catch {
+            const isTimeout = res.status === 504;
+            updateFile(entry.id, {
+              status: "error",
+              error: isTimeout
+                ? "Function timed out — the PDF may be too large"
+                : `Server error (${res.status}): non-JSON response`,
+            });
+            return;
+          }
+
+          if (!res.ok) {
+            updateFile(entry.id, {
+              status: "error",
+              error: (result.error as string) ?? "Ingestion failed",
+            });
+          } else {
+            updateFile(entry.id, {
+              status: "done",
+              chunkCount: result.chunkCount as number,
+            });
+          }
+        } catch (err) {
+          updateFile(entry.id, {
+            status: "error",
+            error:
+              err instanceof Error ? err.message : "Ingestion request failed",
+          });
+        }
+      }),
+    ).then(() => {
+      onUploadComplete?.();
+    });
+  }, [files, autoIngest, updateFile, onUploadComplete, projectName, tags]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -235,7 +322,11 @@ export default function UploadPdf({
           const res = await fetch("/api/ingest", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ storagePath: entry.storagePath }),
+            body: JSON.stringify({
+              storagePath: entry.storagePath,
+              projectName,
+              tags,
+            }),
           });
 
           const text = await res.text();
@@ -278,84 +369,85 @@ export default function UploadPdf({
   }
 
   const shellClass = isSidebar
-    ? "rounded-lg border border-sidebar-border bg-sidebar-accent/50 shadow-none"
-    : "rounded-xl border border-border bg-card shadow-sm";
+    ? embedLight
+      ? "rounded-xl border-0 bg-transparent shadow-none"
+      : "rounded-lg border border-sidebar-border bg-sidebar-accent/50 shadow-none"
+    : "rounded-[24px] bg-white p-2";
 
   const dropBase = isSidebar
-    ? "border-sidebar-border bg-sidebar/40 text-sidebar-foreground"
+    ? embedLight
+      ? "border-zinc-300/90 bg-zinc-50/40 text-zinc-600"
+      : "border-sidebar-border bg-sidebar/40 text-sidebar-foreground"
     : "border-border bg-muted/30 text-muted-foreground";
 
   const dropActive = isSidebar
-    ? "border-sidebar-primary bg-sidebar-accent"
+    ? embedLight
+      ? "border-blue-500 bg-blue-50/80 text-zinc-700"
+      : "border-sidebar-primary bg-sidebar-accent"
     : "border-primary bg-primary/5";
 
   const mutedText = isSidebar
-    ? "text-sidebar-foreground/70"
+    ? embedLight
+      ? "text-zinc-500"
+      : "text-sidebar-foreground/70"
     : "text-muted-foreground";
-
-  const labelStrong = isSidebar
-    ? "text-sidebar-foreground"
-    : "text-foreground";
 
   return (
     <section className={cn("w-full", !isSidebar && "max-w-xl")}>
       <div className={cn("overflow-hidden", shellClass)}>
         {!isSidebar && (
-          <div className="border-b border-border px-6 py-4">
-            <h2 className="text-center text-lg font-semibold tracking-tight text-foreground">
+          <div className="border-b border-black/[0.06] px-6 py-4">
+            <h2 className="text-center text-lg font-bold tracking-tight text-[#111]">
               File upload
             </h2>
           </div>
         )}
 
-        <div className={cn(isSidebar ? "p-3" : "p-6 pt-4")}>
+        <div className={cn(isSidebar ? "p-3" : "p-4")}>
           <div
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             className={cn(
-              "flex flex-col items-center justify-center rounded-md border border-dashed transition-colors",
+              "flex flex-col items-center justify-center rounded-xl border-2 border-dashed transition-colors",
               isSidebar ? "px-3 py-6" : "px-6 py-10",
-              dragging ? dropActive : dropBase,
+              dragging ? dropActive : (!isSidebar ? "border-[#4285f4] bg-[#f8faff]" : dropBase),
             )}
           >
-            <svg
+            <CloudUpload 
               className={cn(
-                "mb-2 opacity-70",
-                isSidebar ? "h-9 w-9" : "h-11 w-11",
-                isSidebar ? "text-sidebar-foreground" : "text-muted-foreground",
+                "mb-3",
+                isSidebar ? "h-9 w-9" : "h-14 w-14",
+                isSidebar
+                  ? embedLight
+                    ? "text-blue-600"
+                    : "text-sidebar-foreground"
+                  : "text-[#4285f4]",
               )}
-              fill="none"
-              viewBox="0 0 48 48"
-              stroke="currentColor"
-              strokeWidth={1.5}
-              aria-hidden
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M14 36c-4.42 0-8-3.58-8-8a7.96 7.96 0 0 1 5.04-7.43A12 12 0 0 1 34.1 18.2 10 10 0 0 1 38 38H14Z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M24 26v-14m-5 5 5-5 5 5"
-              />
-            </svg>
+              strokeWidth={2.5}
+            />
 
-            <p className={cn("text-center text-sm", mutedText)}>
-              Drag PDFs here or{" "}
+            <p
+              className={cn(
+                "text-center",
+                isSidebar && !embedLight ? "text-[17px]" : isSidebar ? "text-[15px]" : "text-[17px]",
+                isSidebar ? mutedText : "text-[#111]",
+              )}
+            >
+              Drag and drop PDFs here or{" "}
               <button
                 type="button"
                 onClick={handleBrowse}
                 disabled={uploadDisabledAttr}
                 className={cn(
-                  "font-medium underline-offset-4 hover:underline",
+                  "font-medium underline underline-offset-2",
                   uploadInteractionBlocked && "cursor-not-allowed opacity-60",
                   isSidebar
-                    ? "text-sidebar-primary"
-                    : "text-primary",
+                    ? embedLight
+                      ? "text-blue-600 hover:text-blue-700"
+                      : "text-sidebar-primary"
+                    : "text-[#4285f4] hover:text-[#2b65c2]",
                 )}
               >
                 browse
@@ -373,7 +465,7 @@ export default function UploadPdf({
             className="sr-only"
           />
           {authReady && !userId ? (
-            <p className={cn("mt-3 text-center text-xs", mutedText)}>
+            <p className={cn("mt-3 text-center text-xs", isSidebar ? mutedText : "text-gray-500")}>
               Sign in to upload files.
             </p>
           ) : null}
@@ -382,33 +474,32 @@ export default function UploadPdf({
         {files.length > 0 && (
           <div
             className={cn(
-              "flex flex-col gap-2 border-t px-3 pb-1",
-              isSidebar
-                ? "border-sidebar-border px-3"
-                : "border-border px-6",
+              "flex flex-col gap-3 pb-2 pt-4 px-2",
             )}
           >
             {files.map((entry) => (
               <div
                 key={entry.id}
-                className="flex items-start gap-3 rounded-md px-1 py-2"
+                className="flex items-center gap-3 rounded-md px-2"
               >
                 <div
                   className={cn(
-                    "flex size-9 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold uppercase",
-                    isSidebar
-                      ? "bg-sidebar-accent text-sidebar-foreground/70"
-                      : "bg-muted text-muted-foreground",
+                    "flex shrink-0 items-center justify-center",
+                    isSidebar ? "size-9" : "size-12",
                   )}
                 >
-                  PDF
+                  <svg width="36" height="42" viewBox="0 0 40 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 8C4 5.79086 5.79086 4 8 4H24L36 16V40C36 42.2091 34.2091 44 32 44H8C5.79086 44 4 42.2091 4 40V8Z" stroke="#4a5568" strokeWidth="3" strokeLinejoin="round"/>
+                    <path d="M24 4V16H36" stroke="#4a5568" strokeWidth="3" strokeLinejoin="round"/>
+                    <rect x="0" y="26" width="40" height="14" fill="white"/>
+                    <text x="20" y="38" fontSize="14" fontWeight="900" fill="#2b6ced" textAnchor="middle" fontFamily="sans-serif">PDF</text>
+                  </svg>
                 </div>
 
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 flex flex-col justify-center">
                   <p
                     className={cn(
-                      "truncate text-sm font-medium",
-                      labelStrong,
+                      "truncate text-[15px] font-medium text-[#111]",
                     )}
                   >
                     {entry.file.name}
@@ -417,17 +508,13 @@ export default function UploadPdf({
                   <div
                     className={cn(
                       "mt-1.5 h-1.5 w-full overflow-hidden rounded-full",
-                      isSidebar ? "bg-sidebar-border" : "bg-muted",
+                      isSidebar ? "bg-sidebar-border" : "bg-[#e2e8f0]",
                     )}
                   >
                     <div
                       className={cn(
                         "h-full rounded-full transition-all duration-300",
-                        entry.status === "error" && "bg-destructive",
-                        entry.status === "done" && "bg-primary",
-                        entry.status !== "error" &&
-                          entry.status !== "done" &&
-                          "bg-primary/80",
+                        entry.status === "error" ? "bg-destructive" : "bg-[#4285f4]",
                       )}
                       style={{ width: `${entry.progress}%` }}
                     />
@@ -435,33 +522,24 @@ export default function UploadPdf({
 
                   <div
                     className={cn(
-                      "mt-1 flex items-center justify-between gap-2 text-xs",
-                      mutedText,
+                      "mt-1.5 flex items-center justify-between text-[13px] font-medium",
                     )}
                   >
-                    <span>
+                    <span className="text-gray-500">
                       {formatBytes(entry.loaded)} /{" "}
                       {formatBytes(entry.file.size)}
                     </span>
-                    <span className="shrink-0 tabular-nums">
+                    <span className={cn(
+                      "shrink-0 tabular-nums text-[#4285f4]",
+                      entry.status === "error" && "text-destructive"
+                    )}>
                       {entry.status === "uploading" &&
                         `${entry.progress}%`}
                       {entry.status === "uploaded" && "Ready"}
-                      {entry.status === "ingesting" && (
-                        <span className="animate-pulse text-primary">
-                          Processing…
-                        </span>
-                      )}
-                      {entry.status === "done" && (
-                        <span className="text-primary">
-                          Done
-                          {entry.chunkCount != null
-                            ? ` · ${entry.chunkCount} chunks`
-                            : ""}
-                        </span>
-                      )}
+                      {entry.status === "ingesting" && "Processing..."}
+                      {entry.status === "done" && "Done"}
                       {entry.status === "error" && (
-                        <span className="text-destructive">
+                        <span>
                           {entry.error ?? "Error"}
                         </span>
                       )}
@@ -473,26 +551,28 @@ export default function UploadPdf({
           </div>
         )}
 
-        <div
-          className={cn(
-            "border-t p-3",
-            isSidebar ? "border-sidebar-border" : "border-border p-6",
-          )}
-        >
-          <Button
-            type="button"
-            onClick={handleDone}
-            disabled={ingestionButtonDisabled}
-            size={isSidebar ? "sm" : "default"}
-            className="w-full"
+        {!autoIngest && (
+          <div
+            className={cn(
+              "border-t p-3",
+              isSidebar ? "border-sidebar-border" : "border-border p-6",
+            )}
           >
-            {files.some((f) => f.status === "ingesting")
-              ? "Processing…"
-              : allDone
-                ? "All done"
-                : "Run ingestion"}
-          </Button>
-        </div>
+            <Button
+              type="button"
+              onClick={handleDone}
+              disabled={ingestionButtonDisabled}
+              size={isSidebar ? "sm" : "default"}
+              className="w-full"
+            >
+              {files.some((f) => f.status === "ingesting")
+                ? "Processing…"
+                : allDone
+                  ? "All done"
+                  : "Run ingestion"}
+            </Button>
+          </div>
+        )}
       </div>
     </section>
   );

@@ -1,11 +1,10 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 import { searchDocuments } from "@/src/lib/retrieval/search";
 import { createServerSupabase } from "@/src/lib/supabase/server";
+import { chatStream, type ChatMessage } from "@/src/lib/ai/openrouter";
 
 export const runtime = "nodejs";
 
-const CHAT_MODEL = "gemini-3.1-flash-lite-preview";
 const DEFAULT_TOP_K = 6;
 
 const UUID_PREFIX_RE =
@@ -27,12 +26,14 @@ function buildPrompt(query: string, contextChunks: string[]) {
       : "No context chunks were retrieved.";
 
   return `
-You are a document QA assistant.
+You are an expert Hardware Integration Assistant.
 
 Rules:
-- Answer using only the provided context.
-- If the context is insufficient, respond exactly: "I don't have enough information."
-- Keep answers concise and factual.
+- Use the provided context to extract specific electrical characteristics, pinouts, and communication protocols.
+- You may use your internal knowledge of microcontrollers and electronics to interpret how the data in the context applies to the user's specific application
+- If your internal knowledge contradicts the provided context, always prioritize the context.
+- If a specific technical value required for an answer (like a max voltage) is missing from both the context and your internal knowledge, respond: "I don't have enough information."
+- Keep answers technical, concise, and focused on implementation.
 - Do NOT include a "Sources:" section. Source citations are handled separately by the UI.
 
 Context:
@@ -65,14 +66,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const googleApiKey = process.env.GOOGLE_API_KEY;
-  if (!googleApiKey) {
-    return NextResponse.json(
-      { error: "Missing env var GOOGLE_API_KEY" },
-      { status: 500 },
-    );
-  }
-
   try {
     const matches = await searchDocuments(query, user.id, DEFAULT_TOP_K);
 
@@ -93,26 +86,8 @@ export async function POST(request: NextRequest) {
       ),
     );
 
-    const genAI = new GoogleGenerativeAI(googleApiKey);
-    const model = genAI.getGenerativeModel({ model: CHAT_MODEL });
-    const result = await model.generateContentStream(prompt);
-
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        try {
-          for await (const chunk of result.stream) {
-            const text = chunk.text();
-            if (text) {
-              controller.enqueue(encoder.encode(text));
-            }
-          }
-          controller.close();
-        } catch (error) {
-          controller.error(error);
-        }
-      },
-    });
+    const messages: ChatMessage[] = [{ role: "user", content: prompt }];
+    const stream = chatStream(messages);
 
     return new Response(stream, {
       headers: {

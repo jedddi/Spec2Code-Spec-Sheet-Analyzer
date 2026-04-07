@@ -5,7 +5,7 @@ A Next.js app for working with hardware datasheets: upload PDFs, ingest them int
 ## Features
 
 - PDF upload to Supabase Storage with per-user scoping.
-- Ingestion pipeline: PDF extraction -> chunking -> Gemini embeddings -> `document_chunks`.
+- Ingestion pipeline: PDF extraction -> chunking -> OpenRouter embeddings -> `document_chunks`.
 - RAG chat over ingested documents with streamed responses and citation metadata.
 - Quick specs generation as markdown tables from ingested chunks.
 - C++ header generation from ingested chunks.
@@ -20,12 +20,12 @@ flowchart TD
   appUi --> storage[SupabaseStorage]
   appUi --> ingestApi[IngestApi]
   ingestApi --> pdfExtract[PdfExtractChunk]
-  pdfExtract --> embedModel[GeminiEmbeddings]
+  pdfExtract --> embedModel[OpenRouterEmbeddings]
   embedModel --> chunkTable[document_chunks]
   appUi --> chatApi[ChatApi]
   chatApi --> matchRpc[match_document_chunks]
   matchRpc --> chunkTable
-  chatApi --> llm[GeminiChatModel]
+  chatApi --> llm[OpenRouterChat]
   appUi --> quickSpecsApi[QuickSpecsApi]
   appUi --> headerApi[GenerateHeaderApi]
 ```
@@ -35,7 +35,7 @@ flowchart TD
 1. User signs in with Supabase Auth.
 2. User uploads PDF(s) into Supabase bucket `Spec-sheets` under `uploads/<user_id>/...`.
 3. Ingestion API extracts text, chunks it, generates embeddings, and stores rows in `document_chunks`.
-4. Chat API embeds the query, retrieves relevant chunks via `match_document_chunks`, and streams a Gemini answer.
+4. Chat API embeds the query, retrieves relevant chunks via `match_document_chunks`, and streams an answer via OpenRouter.
 5. Quick Specs and Generate Header APIs read ingested chunks and produce specialized outputs.
 
 ## Tech Stack
@@ -43,7 +43,7 @@ flowchart TD
 - Framework: Next.js 16 (App Router), React 19, TypeScript
 - Styling/UI: Tailwind CSS v4, shadcn UI/Radix-based components
 - Auth + data + storage: Supabase (`@supabase/ssr`, `@supabase/supabase-js`)
-- AI: Google Generative AI (Gemini chat + embeddings)
+- AI: OpenRouter (OpenAI-compatible chat + embeddings)
 - PDF parsing: `pdf-parse`
 - Vector search: Postgres + `pgvector` + Supabase SQL RPC
 
@@ -52,7 +52,7 @@ flowchart TD
 - Node.js current LTS (recommended for Next.js 16 compatibility)
 - npm (repo includes `package-lock.json`)
 - Supabase project (database + storage + auth)
-- Google AI API key for Gemini
+- OpenRouter API key
 
 ## Environment Variables
 
@@ -62,14 +62,22 @@ Create `.env.local` in the project root:
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-GOOGLE_API_KEY=your_google_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
+
+# Optional model overrides (defaults shown):
+# OPENROUTER_CHAT_MODEL=openai/gpt-4o-mini
+# OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
+# OPENROUTER_METADATA_MODEL=openai/gpt-4o-mini
+# OPENROUTER_HTTP_REFERER=https://your-app-domain.com
+# OPENROUTER_APP_NAME=Spec2Code
 ```
 
 Notes:
 
 - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are used by browser, middleware, and server session clients.
 - `SUPABASE_SERVICE_ROLE_KEY` is used server-side for privileged database operations.
-- `GOOGLE_API_KEY` is required for chat, embeddings, quick specs, and header generation.
+- `OPENROUTER_API_KEY` is required for chat, embeddings, quick specs, and header generation.
+- `OPENROUTER_CHAT_MODEL`, `OPENROUTER_EMBEDDING_MODEL`, and `OPENROUTER_METADATA_MODEL` are optional overrides for the default models.
 
 ## Installation and Run
 
@@ -199,8 +207,8 @@ middleware.ts
 
 ## Troubleshooting
 
-- `Missing env var GOOGLE_API_KEY`
-  - Add `GOOGLE_API_KEY` to `.env.local`, restart dev server.
+- `Missing env var OPENROUTER_API_KEY`
+  - Add `OPENROUTER_API_KEY` to `.env.local`, restart dev server.
 
 - `match_document_chunks RPC is missing`
   - Apply latest migrations, especially `006_match_chunks_user_scope.sql` and `007_match_chunks_include_page.sql`.
@@ -213,6 +221,16 @@ middleware.ts
 
 - Ingestion timeout on large PDFs
   - Retry with smaller files or split large documents before ingesting.
+
+## Migrating from Gemini to OpenRouter
+
+If you previously ran this project with Gemini embeddings, your stored vectors in `document_chunks` are incompatible with the new OpenRouter embedding model. You must re-ingest all documents after switching:
+
+1. Replace `GOOGLE_API_KEY` with `OPENROUTER_API_KEY` in `.env.local`.
+2. Delete existing chunk rows (or truncate `document_chunks`).
+3. Re-upload and re-ingest every PDF so embeddings are regenerated with the new model.
+
+Until re-ingestion is complete, similarity search will return poor results.
 
 ## Future Improvements
 

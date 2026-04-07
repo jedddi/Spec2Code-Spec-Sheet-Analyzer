@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/src/hooks/useAuth";
 import { useChatSessions } from "@/src/hooks/useChatSessions";
-import { useUserFiles } from "@/src/hooks/useUserFiles";
+import { useDocumentsContext } from "@/src/contexts/documents-context";
 import { useSidebar } from "@/src/contexts/sidebar-context";
 import {
   Tooltip,
@@ -191,7 +191,7 @@ export default function SidebarV2() {
   useEffect(() => {
     refetchSessions();
   }, [pathname, refetchSessions]);
-  const { files, loading: filesLoading } = useUserFiles(user?.id);
+  const { documents, loading: docsLoading } = useDocumentsContext();
 
   const [scrollThumbTop, setScrollThumbTop] = useState(0);
   const [scrollThumbHeight, setScrollThumbHeight] = useState(TRACK_HEIGHT);
@@ -384,32 +384,37 @@ export default function SidebarV2() {
                 {/* Files Uploaded */}
                 <p className="mt-5 text-xs text-white/50">Files Uploaded</p>
 
-                {authLoading || filesLoading ? (
+                {authLoading || docsLoading ? (
                   <div className="mt-3 flex items-center gap-2 text-xs text-white/40">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     Loading...
                   </div>
-                ) : files.length > 0 ? (
+                ) : documents.length > 0 ? (
                   <div className="mt-3 space-y-2">
-                    {files.slice(0, 8).map((file) => (
+                    {documents.slice(0, 8).map((doc) => (
                       <div
-                        key={file.name}
+                        key={doc.id}
                         className="flex items-center gap-2 text-xs text-white/70"
                       >
                         <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-white/10">
                           <span className="text-[8px] text-white/60">F</span>
                         </div>
                         <span className="min-w-0 truncate">
-                          {stripUuidPrefix(file.name)}
+                          {stripUuidPrefix(doc.filename)}
                         </span>
+                        {doc.category && (
+                          <span className="ml-auto shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white/50">
+                            {doc.category}
+                          </span>
+                        )}
                       </div>
                     ))}
-                    {files.length > 8 && (
+                    {documents.length > 8 && (
                       <Link
                         href="/overview"
                         className="block text-xs text-[var(--v2-primary)] hover:underline"
                       >
-                        +{files.length - 8} more
+                        +{documents.length - 8} more
                       </Link>
                     )}
                   </div>

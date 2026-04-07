@@ -5,7 +5,7 @@
  *   1. List files in Storage to pick a PDF
  *   2. Extract text from the PDF
  *   3. Chunk the extracted text
- *   4. Generate embeddings via Google Gemini
+ *   4. Generate embeddings via OpenRouter
  *   5. Store chunks + embeddings in Supabase Postgres
  *   6. Query the DB to verify storage
  *
@@ -19,7 +19,7 @@ config({ path: ".env.local" });
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY!;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY!;
 const BUCKET = "Spec-sheets";
 
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -155,33 +155,46 @@ console.log(`\nFirst chunk preview:\n${preview(chunks[0].content, 200)}`);
 
 // ── Stage 4: Generate embeddings ────────────────────────────
 
-heading("4 — Generate embeddings (Google gemini-embedding-001)");
+heading("4 — Generate embeddings (OpenRouter)");
 
-if (!GOOGLE_API_KEY) {
-  console.error("Missing GOOGLE_API_KEY in .env.local");
+if (!OPENROUTER_API_KEY) {
+  console.error("Missing OPENROUTER_API_KEY in .env.local");
   process.exit(1);
 }
 
-const { GoogleGenerativeAI } = await import("@google/generative-ai");
-const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
+const EMBEDDING_MODEL = process.env.OPENROUTER_EMBEDDING_MODEL ?? "openai/text-embedding-3-small";
+const EMBEDDING_DIMS = 768;
+const OR_BASE = "https://openrouter.ai/api/v1";
 
 const textsToEmbed = chunks.map((c) => c.content);
 const BATCH = 100;
 const embeddings: number[][] = new Array(textsToEmbed.length);
 
-console.log(`Embedding ${textsToEmbed.length} chunks in batches of ${BATCH}...`);
+console.log(`Embedding ${textsToEmbed.length} chunks in batches of ${BATCH} (model: ${EMBEDDING_MODEL})...`);
 
 for (let start = 0; start < textsToEmbed.length; start += BATCH) {
   const batch = textsToEmbed.slice(start, start + BATCH);
-    const result = await model.batchEmbedContents({
-      requests: batch.map((text) => ({
-        content: { parts: [{ text }], role: "user" as const },
-        outputDimensionality: 768,
-      })),
-    });
-  for (let i = 0; i < result.embeddings.length; i++) {
-    embeddings[start + i] = result.embeddings[i].values;
+  const res = await fetch(`${OR_BASE}/embeddings`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: EMBEDDING_MODEL,
+      input: batch,
+      dimensions: EMBEDDING_DIMS,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    console.error(`Embedding request failed (${res.status}): ${text}`);
+    process.exit(1);
+  }
+  const json = (await res.json()) as { data: { embedding: number[]; index: number }[] };
+  const sorted = [...json.data].sort((a, b) => a.index - b.index);
+  for (let i = 0; i < sorted.length; i++) {
+    embeddings[start + i] = sorted[i].embedding;
   }
   console.log(`  Batch ${Math.floor(start / BATCH) + 1}: embedded ${batch.length} chunks`);
 }
