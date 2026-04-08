@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
               ? projectName.trim()
               : DEFAULT_DOCUMENT_PROJECT,
           tags: Array.isArray(tags) ? tags.filter((tag): tag is string => typeof tag === "string") : [],
-          status: "error",
+          status: "failed",
           error_message: message,
           updated_at: new Date().toISOString(),
         },

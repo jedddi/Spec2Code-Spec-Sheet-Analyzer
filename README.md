@@ -5,7 +5,7 @@ A Next.js app for working with hardware datasheets: upload PDFs, ingest them int
 ## Features
 
 - PDF upload to Supabase Storage with per-user scoping.
-- Ingestion pipeline: PDF extraction -> chunking -> OpenRouter embeddings -> `document_chunks`.
+- Non-blocking ingestion pipeline: upload + queue -> Supabase Edge Function -> Unstructured markdown extraction.
 - RAG chat over ingested documents with streamed responses and citation metadata.
 - Quick specs generation as markdown tables from ingested chunks.
 - C++ header generation from ingested chunks.
@@ -18,10 +18,15 @@ flowchart TD
   user[User] --> appUi[NextJsApp]
   appUi --> supabaseAuth[SupabaseAuth]
   appUi --> storage[SupabaseStorage]
-  appUi --> ingestApi[IngestApi]
-  ingestApi --> pdfExtract[PdfExtractChunk]
-  pdfExtract --> embedModel[OpenRouterEmbeddings]
-  embedModel --> chunkTable[document_chunks]
+  appUi --> insertPending[InsertDocumentsPending]
+  insertPending --> dbWebhook[SupabaseDbWebhook]
+  dbWebhook --> ingestFn[SupabaseEdgeFunction]
+  ingestFn --> unstructured[UnstructuredApi]
+  ingestFn --> documentsTable[documents status+markdown]
+  documentsTable --> realtime[SupabaseRealtime]
+  realtime --> appUi
+  appUi --> ingestApi[ManualIngestApi Optional]
+  ingestApi --> chunkTable[document_chunks]
   appUi --> chatApi[ChatApi]
   chatApi --> matchRpc[match_document_chunks]
   matchRpc --> chunkTable
@@ -34,9 +39,11 @@ flowchart TD
 
 1. User signs in with Supabase Auth.
 2. User uploads PDF(s) into Supabase bucket `Spec-sheets` under `uploads/<user_id>/...`.
-3. Ingestion API extracts text, chunks it, generates embeddings, and stores rows in `document_chunks`.
-4. Chat API embeds the query, retrieves relevant chunks via `match_document_chunks`, and streams an answer via OpenRouter.
-5. Quick Specs and Generate Header APIs read ingested chunks and produce specialized outputs.
+3. Client inserts a `documents` row with status `pending`, then returns immediately.
+4. Supabase DB webhook triggers the `ingest-document` Edge Function, which updates `pending -> processing -> completed/failed`.
+5. The Edge Function parses PDFs with Unstructured and stores markdown in `documents.markdown_content`.
+6. Frontend listens via Supabase Realtime and updates status without waiting for parsing.
+7. Chat/Quick Specs/Header APIs can still use the manual ingest/indexing path and `document_chunks`.
 
 ## Tech Stack
 
@@ -63,6 +70,9 @@ NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 OPENROUTER_API_KEY=your_openrouter_api_key
+UNSTRUCTURED_API_KEY=your_unstructured_api_key
+# Optional: verify DB webhook requests (set as Edge secret INGEST_WEBHOOK_SECRET — not SUPABASE_* — see README Supabase section)
+# INGEST_WEBHOOK_SECRET=choose_a_long_random_secret
 
 # Optional model overrides (defaults shown):
 # OPENROUTER_CHAT_MODEL=openai/gpt-4o-mini
@@ -77,6 +87,9 @@ Notes:
 - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are used by browser, middleware, and server session clients.
 - `SUPABASE_SERVICE_ROLE_KEY` is used server-side for privileged database operations.
 - `OPENROUTER_API_KEY` is required for chat, embeddings, quick specs, and header generation.
+- `UNSTRUCTURED_API_KEY` is required by the async ingestion Edge Function (set via `supabase secrets set`).
+- **Do not** try to set `SUPABASE_SERVICE_ROLE_KEY` (or any `SUPABASE_*` name) with `supabase secrets set`; the CLI skips those. Hosted functions already receive `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` automatically.
+- Optional webhook verification: set secret `INGEST_WEBHOOK_SECRET` and send the same value in header `x-webhook-secret` from the Database Webhook.
 - `OPENROUTER_CHAT_MODEL`, `OPENROUTER_EMBEDDING_MODEL`, and `OPENROUTER_METADATA_MODEL` are optional overrides for the default models.
 
 ## Installation and Run
@@ -146,21 +159,68 @@ The app uploads files under:
 
 The app requires authenticated users for all routes except `/login`.
 
+### 4) Deploy async ingestion edge function
+
+Deploy the worker:
+
+```bash
+supabase functions deploy ingest-document
+```
+
+Set function secrets:
+
+```bash
+npx supabase secrets set UNSTRUCTURED_API_KEY=your_key
+
+# Optional (webhook HMAC-style shared secret — must not start with SUPABASE_)
+npx supabase secrets set INGEST_WEBHOOK_SECRET=your_long_random_string
+```
+
+**RAG finalize (chunks + category tags + Quick Specs):** After Unstructured writes `markdown_content`, the app must run chunking + OpenRouter embeddings + metadata extraction.
+
+- **Default (no extra secrets):** While you’re signed in, the client **automatically** calls `POST /api/documents/finalize-ingest` for any row that is `completed` but still has `chunk_count = 0`. That uses your normal session cookie — you do **not** need `INGEST_FINALIZE_*` for local dev.
+
+- **Optional (Edge calls Next in production):** You can still set `INGEST_FINALIZE_URL` + `INGEST_FINALIZE_SECRET` on the Edge function so finalize runs immediately after parse without waiting for an open browser tab:
+
+   1. Add `INGEST_FINALIZE_SECRET` to **Vercel / `.env.local`**.
+   2. `npx supabase secrets set INGEST_FINALIZE_URL="https://your-app.vercel.app"` and matching `INGEST_FINALIZE_SECRET`.
+
+   `INGEST_FINALIZE_URL` must be a **public** HTTPS origin (not `localhost`).
+
+Configure a Supabase **Database Webhook**:
+
+- Table: `public.documents`
+- Event: `INSERT`
+- URL: `https://<project-ref>.functions.supabase.co/ingest-document`
+- Secret header: `x-webhook-secret` (same value as Edge secret `INGEST_WEBHOOK_SECRET`, if you use it)
+
 ## Usage Workflow
 
 1. Sign up or sign in at `/login`.
 2. Upload one or more PDFs from the sidebar uploader.
-3. Click **Run ingestion** to process uploaded files.
-4. Ask questions in chat to get source-grounded responses.
-5. Open file actions to:
+3. Upload PDF(s); ingestion is queued immediately and processing continues in the background.
+4. Watch realtime status updates (`pending -> processing -> completed/failed`) in the UI (with RAG finalize configured, chunk count and category tags update automatically).
+5. Ask questions in chat to get source-grounded responses.
+6. Open file actions to:
    - Generate code (C++ header)
    - Generate quick specs (markdown table)
 
 ## API Routes
 
-- `POST /api/ingest`
+- `POST /api/ingest` (optional/manual indexing path)
   - Body: `{ "storagePath": "uploads/<user_id>/<file>" }`
   - Behavior: extracts/chunks/embeds PDF and upserts chunk rows for the user.
+
+- `POST /api/documents/finalize-ingest`
+  - **Session:** signed-in user; body `{ "documentId": "<uuid>" }` — must own the document. No shared secret required.
+  - **Internal:** header `x-ingest-finalize-secret` matching `INGEST_FINALIZE_SECRET` (Edge Function calling production URL).
+  - Behavior: reads `markdown_content`, chunks, embeds, sets `document_chunks` and datasheet metadata (category/tags). Needs `OPENROUTER_API_KEY` on the Next.js server.
+
+- `POST /api/documents/trigger-ingest` (authenticated)
+  - Body: `{ "documentId": "<uuid>" }`
+  - Behavior: calls the `ingest-document` Edge Function again with a webhook-shaped payload. Use if a row stays in **`processing`** (“Indexing”) after a failed or timed-out run (INSERT webhooks do not fire twice for the same row).
+
+Optional: set `INGEST_WEBHOOK_SECRET` in `.env.local` to match the Edge secret when your function validates `x-webhook-secret`.
 
 - `POST /api/chat`
   - Body: `{ "query": "..." }`

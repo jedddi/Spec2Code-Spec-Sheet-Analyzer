@@ -14,7 +14,7 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 interface FileEntry {
   id: string;
   file: File;
-  status: "uploading" | "uploaded" | "ingesting" | "done" | "error";
+  status: "uploading" | "uploaded" | "queued" | "error";
   progress: number;
   loaded: number;
   storagePath: string;
@@ -88,6 +88,42 @@ export default function UploadPdf({
         prev.map((f) => (f.id === id ? { ...f, ...patch } : f)),
       ),
     [],
+  );
+
+  const enqueueDocument = useCallback(
+    async (entry: FileEntry) => {
+      if (!userId) {
+        throw new Error("You must be signed in to enqueue ingestion");
+      }
+
+      const normalizedTags = Array.isArray(tags)
+        ? tags.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean)
+        : [];
+      const fileUrl = `${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${entry.storagePath}`;
+
+      const { error } = await supabase.from("documents").upsert(
+        {
+          user_id: userId,
+          storage_path: entry.storagePath,
+          file_url: fileUrl,
+          filename: entry.file.name,
+          file_size: entry.file.size,
+          project_name: projectName?.trim() || undefined,
+          tags: normalizedTags,
+          status: "pending",
+          markdown_content: null,
+          error_log: null,
+          error_message: null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,storage_path" },
+      );
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    },
+    [projectName, supabase, tags, userId],
   );
 
   const uploadFileXhr = useCallback(
@@ -193,59 +229,23 @@ export default function UploadPdf({
 
     ready.forEach((f) => autoIngestTriggeredRef.current.add(f.id));
 
-    ready.forEach((f) => updateFile(f.id, { status: "ingesting" }));
-
     void Promise.all(
       ready.map(async (entry) => {
         try {
-          const res = await fetch("/api/ingest", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              storagePath: entry.storagePath,
-              projectName,
-              tags,
-            }),
-          });
-
-          const text = await res.text();
-          let result: Record<string, unknown>;
-          try {
-            result = JSON.parse(text);
-          } catch {
-            const isTimeout = res.status === 504;
-            updateFile(entry.id, {
-              status: "error",
-              error: isTimeout
-                ? "Function timed out — the PDF may be too large"
-                : `Server error (${res.status}): non-JSON response`,
-            });
-            return;
-          }
-
-          if (!res.ok) {
-            updateFile(entry.id, {
-              status: "error",
-              error: (result.error as string) ?? "Ingestion failed",
-            });
-          } else {
-            updateFile(entry.id, {
-              status: "done",
-              chunkCount: result.chunkCount as number,
-            });
-          }
+          await enqueueDocument(entry);
+          updateFile(entry.id, { status: "queued" });
         } catch (err) {
           updateFile(entry.id, {
             status: "error",
             error:
-              err instanceof Error ? err.message : "Ingestion request failed",
+              err instanceof Error ? err.message : "Failed to queue ingestion",
           });
         }
       }),
     ).then(() => {
       onUploadComplete?.();
     });
-  }, [files, autoIngest, updateFile, onUploadComplete, projectName, tags]);
+  }, [autoIngest, enqueueDocument, files, onUploadComplete, updateFile]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -297,16 +297,12 @@ export default function UploadPdf({
   );
 
   const hasUploading = files.some((f) => f.status === "uploading");
-  const hasIngesting = files.some((f) => f.status === "ingesting");
+  const hasPendingQueue = files.some((f) => f.status === "uploaded");
   const allDone =
-    files.length > 0 && files.every((f) => f.status === "done");
+    files.length > 0 && files.every((f) => f.status === "queued");
   const hasWorkToIngest = files.some((f) => f.status === "uploaded");
 
-  const doneDisabled =
-    !hasWorkToIngest ||
-    hasUploading ||
-    hasIngesting ||
-    allDone;
+  const doneDisabled = !hasWorkToIngest || hasUploading || allDone;
 
   const ingestionButtonDisabled = doneDisabled;
 
@@ -314,52 +310,16 @@ export default function UploadPdf({
     const toIngest = files.filter((f) => f.status === "uploaded");
     if (toIngest.length === 0) return;
 
-    toIngest.forEach((f) => updateFile(f.id, { status: "ingesting" }));
-
     await Promise.all(
       toIngest.map(async (entry) => {
         try {
-          const res = await fetch("/api/ingest", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              storagePath: entry.storagePath,
-              projectName,
-              tags,
-            }),
-          });
-
-          const text = await res.text();
-          let result: Record<string, unknown>;
-          try {
-            result = JSON.parse(text);
-          } catch {
-            const isTimeout = res.status === 504;
-            updateFile(entry.id, {
-              status: "error",
-              error: isTimeout
-                ? "Function timed out — the PDF may be too large"
-                : `Server error (${res.status}): non-JSON response`,
-            });
-            return;
-          }
-
-          if (!res.ok) {
-            updateFile(entry.id, {
-              status: "error",
-              error: (result.error as string) ?? "Ingestion failed",
-            });
-          } else {
-            updateFile(entry.id, {
-              status: "done",
-              chunkCount: result.chunkCount as number,
-            });
-          }
+          await enqueueDocument(entry);
+          updateFile(entry.id, { status: "queued" });
         } catch (err) {
           updateFile(entry.id, {
             status: "error",
             error:
-              err instanceof Error ? err.message : "Ingestion request failed",
+              err instanceof Error ? err.message : "Failed to queue ingestion",
           });
         }
       }),
@@ -536,8 +496,7 @@ export default function UploadPdf({
                       {entry.status === "uploading" &&
                         `${entry.progress}%`}
                       {entry.status === "uploaded" && "Ready"}
-                      {entry.status === "ingesting" && "Processing..."}
-                      {entry.status === "done" && "Done"}
+                      {entry.status === "queued" && "Queued"}
                       {entry.status === "error" && (
                         <span>
                           {entry.error ?? "Error"}
@@ -565,11 +524,11 @@ export default function UploadPdf({
               size={isSidebar ? "sm" : "default"}
               className="w-full"
             >
-              {files.some((f) => f.status === "ingesting")
-                ? "Processing…"
-                : allDone
-                  ? "All done"
-                  : "Run ingestion"}
+              {hasPendingQueue
+                ? "Queue ingestion"
+                : files.some((f) => f.status === "queued")
+                  ? "Queued"
+                  : "Queue ingestion"}
             </Button>
           </div>
         )}

@@ -122,7 +122,7 @@ export default function OverviewPage() {
     setShowUpload(true);
   }, []);
 
-  const readyDocs = documents.filter((d) => d.status === "ready");
+  const readyDocs = documents.filter((d) => d.status === "completed");
   const totalChunks = readyDocs.reduce((acc, d) => acc + (d.chunk_count ?? 0), 0);
 
   function openGeneratorFor(sourcePdfId?: string) {
