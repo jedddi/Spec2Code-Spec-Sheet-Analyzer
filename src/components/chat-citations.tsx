@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { Citation } from "@/hooks/use-document-chat";
+import type { Citation } from "@/src/hooks/useChatV2";
 import {
   Tooltip,
   TooltipContent,
@@ -59,19 +59,21 @@ export function CitationsDropdown({
   return (
     <div className="w-full">
       <TooltipProvider delayDuration={100}>
-        <ul className="flex max-w-full gap-1.5 overflow-x-auto pb-1">
+        <ul className="flex max-w-full flex-wrap gap-2">
           {groupedSources.map((group, idx) => {
             const chunkCount = group.citations.length;
             return (
-              <li key={`${messageId}-cit-${idx}`} className="shrink-0">
+              <li key={`${messageId}-cit-${idx}`} className="min-w-0 max-w-[200px] shrink-0">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
                       type="button"
-                      className="max-w-36 truncate rounded-md border border-primary/35 bg-card px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                      className="inline-flex h-8 w-full max-w-[200px] items-center justify-start rounded-full border border-[#88c3ed]/80 bg-white px-3.5 text-left text-[13px] font-medium text-[var(--v2-primary)] shadow-[0_1px_2px_rgba(3,134,253,0.08)] transition-colors hover:border-[var(--v2-primary)]/45 hover:bg-[var(--v2-primary)]/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--v2-primary)]/30"
                       aria-label={`Source: ${group.label} (${chunkCount} chunks)`}
                     >
-                      {group.label} ({chunkCount})
+                      <span className="min-w-0 flex-1 truncate">
+                        {group.label} ({chunkCount})
+                      </span>
                     </button>
                   </TooltipTrigger>
                   <TooltipContent

@@ -18,6 +18,7 @@ export type ChatMessageV2 = {
   role: "user" | "assistant";
   content: string;
   citations?: Citation[];
+  lowConfidence?: boolean;
 };
 
 interface UseChatV2Options {
@@ -198,6 +199,8 @@ export function useChatV2({
       const responseCitations = parseCitations(
         response.headers.get("x-chat-sources"),
       );
+      const responseLowConfidence =
+        response.headers.get("x-chat-confidence") === "low";
 
       if (!response.ok) {
         let message = "Chat request failed";
@@ -232,7 +235,7 @@ export function useChatV2({
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMessageId
-              ? { ...msg, content: accumulated, citations: responseCitations }
+              ? { ...msg, content: accumulated, citations: responseCitations, lowConfidence: responseLowConfidence }
               : msg,
           ),
         );
@@ -246,7 +249,7 @@ export function useChatV2({
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMessageId
-              ? { ...msg, content: finalContent, citations: responseCitations }
+              ? { ...msg, content: finalContent, citations: responseCitations, lowConfidence: responseLowConfidence }
               : msg,
           ),
         );
@@ -410,6 +413,12 @@ export function useChatV2({
     [input, isSending, submitQuery],
   );
 
+  /** Fills the composer with a quick prompt without sending. */
+  const applyQuickPrompt = useCallback((text: string) => {
+    if (isSending) return;
+    setInput(text);
+  }, [isSending]);
+
   const prefixedSubmit = useCallback(
     (prefix: string) => {
       if (isSending) return;
@@ -432,6 +441,7 @@ export function useChatV2({
     handleInputChange,
     handleSubmit,
     submitQuery,
+    applyQuickPrompt,
     prefixedSubmit,
   };
 }

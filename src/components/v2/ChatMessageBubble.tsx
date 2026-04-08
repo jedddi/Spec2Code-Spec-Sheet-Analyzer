@@ -1,7 +1,8 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { Sparkles, TriangleAlert } from "lucide-react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import { CitationsDropdown } from "@/src/components/chat-citations";
 import type { ChatMessageV2 } from "@/src/hooks/useChatV2";
 
 interface ChatMessageBubbleProps {
@@ -12,7 +13,7 @@ export default function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
   if (message.role === "user") {
     return <UserBubble content={message.content} />;
   }
-  return <AssistantBubble content={message.content} />;
+  return <AssistantBubble message={message} />;
 }
 
 function UserBubble({ content }: { content: string }) {
@@ -28,8 +29,10 @@ function UserBubble({ content }: { content: string }) {
   );
 }
 
-function AssistantBubble({ content }: { content: string }) {
+function AssistantBubble({ message }: { message: ChatMessageV2 }) {
+  const { content, citations, lowConfidence } = message;
   const isEmpty = !content;
+  const hasSources = citations && citations.length > 0;
 
   return (
     <div className="overflow-hidden rounded-xl border border-[#dfe6e6] bg-white">
@@ -54,6 +57,22 @@ function AssistantBubble({ content }: { content: string }) {
               <MarkdownRenderer>{content}</MarkdownRenderer>
             </div>
           )}
+
+          {lowConfidence && !isEmpty ? (
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+              <p className="text-xs text-amber-700">
+                Low confidence &mdash; the retrieved sources may not be fully relevant to your query.
+              </p>
+            </div>
+          ) : null}
+
+          {hasSources ? (
+            <div className="mt-4 border-t border-[#dfe6e6] pt-3">
+              <p className="mb-2 text-xs font-medium text-[#334a4d]/85">Sources</p>
+              <CitationsDropdown citations={citations} messageId={message.id} />
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

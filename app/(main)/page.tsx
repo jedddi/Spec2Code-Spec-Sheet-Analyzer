@@ -7,7 +7,6 @@ import { Upload } from "lucide-react";
 import NavbarV2 from "@/src/components/v2/NavbarV2";
 import ChatInterfaceV2 from "@/src/components/v2/ChatInterfaceV2";
 import PromptInputV2 from "@/src/components/v2/PromptInputV2";
-import ActionPillsV2 from "@/src/components/v2/ActionPillsV2";
 import BentoGridV2 from "@/src/components/v2/BentoGridV2";
 import ChatMessageList from "@/src/components/v2/ChatMessageList";
 import UploadPdf from "@/src/components/UploadPdf";
@@ -19,11 +18,11 @@ import { useDocumentsContext } from "@/src/contexts/documents-context";
 const DEFAULT_PROMPTS = [
   {
     id: "1",
-    text: "How can we improve model performance this week?",
+    text: "Summarize the power requirements and pinout for",
   },
   {
     id: "2",
-    text: "Are our data signals aligned with business goals?",
+    text: "What is the default I2C address and register map for",
   },
 ];
 
@@ -40,6 +39,7 @@ export default function HomePage() {
   const [droppedFiles, setDroppedFiles] = useState<File[] | null>(null);
   const [dragging, setDragging] = useState(false);
   const dragCounter = useRef(0);
+  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const chat = useChatV2({
     mockMode,
@@ -88,7 +88,7 @@ export default function HomePage() {
       onDrop={handleDrop}
       className="relative flex min-h-0 flex-1 flex-col"
     >
-      <NavbarV2 mockMode={mockMode} onToggleMock={setMockMode} />
+      <NavbarV2 />
 
       {/* Drag overlay */}
       {dragging && (
@@ -143,6 +143,7 @@ export default function HomePage() {
 
               <motion.div layoutId="prompt-input" className="mt-11">
                 <PromptInputV2
+                  ref={promptTextareaRef}
                   value={chat.input}
                   onChange={chat.handleInputChange}
                   onSubmit={chat.handleSubmit}
@@ -150,14 +151,16 @@ export default function HomePage() {
                 />
               </motion.div>
 
-              <ActionPillsV2
-                onQuickSpecs={() => chat.prefixedSubmit("[QUICK SPECS]")}
-                onGenerateCode={() => chat.prefixedSubmit("[GENERATE CODE]")}
-              />
-
               <BentoGridV2
                 prompts={DEFAULT_PROMPTS}
-                onSelect={(text) => chat.submitQuery(text)}
+                onSelect={(text) => {
+                  chat.applyQuickPrompt(text);
+                  queueMicrotask(() => {
+                    promptTextareaRef.current?.focus();
+                    const len = text.length;
+                    promptTextareaRef.current?.setSelectionRange(len, len);
+                  });
+                }}
               />
             </motion.div>
           )}
@@ -179,6 +182,7 @@ export default function HomePage() {
             <div className="shrink-0 px-4 pb-4 pt-3">
               <motion.div layoutId="prompt-input">
                 <PromptInputV2
+                  ref={promptTextareaRef}
                   value={chat.input}
                   onChange={chat.handleInputChange}
                   onSubmit={chat.handleSubmit}

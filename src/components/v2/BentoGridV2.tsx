@@ -12,7 +12,6 @@ interface BentoGridV2Props {
   onSelect: (text: string) => void;
 }
 
-// TODO: Connect onSelect to submitQuery from useDocumentChat.
 export default function BentoGridV2({ prompts, onSelect }: BentoGridV2Props) {
   return (
     <section className="mx-auto mt-10 w-full max-w-[814px]">

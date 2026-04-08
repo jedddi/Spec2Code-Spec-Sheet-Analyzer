@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const matches = await searchDocuments(query, user.id, DEFAULT_TOP_K);
+    const { matches, lowConfidence } = await searchDocuments(query, user.id, DEFAULT_TOP_K);
 
     const PREVIEW_LENGTH = 200;
     const citations = matches.map((match) => ({
@@ -94,6 +94,7 @@ export async function POST(request: NextRequest) {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         "x-chat-sources": encodeURIComponent(JSON.stringify(citations)),
+        "x-chat-confidence": lowConfidence ? "low" : "high",
       },
     });
   } catch (err) {

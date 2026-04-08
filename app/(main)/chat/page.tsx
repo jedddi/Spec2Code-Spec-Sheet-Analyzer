@@ -31,7 +31,7 @@ function ChatPageContent() {
 
   return (
     <>
-      <NavbarV2 mockMode={mockMode} onToggleMock={setMockMode} />
+      <NavbarV2 />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {chat.isLoadingHistory && (
