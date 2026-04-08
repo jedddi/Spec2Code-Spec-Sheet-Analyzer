@@ -89,11 +89,21 @@ export async function partitionPdfToMarkdown(params: {
       },
     });
 
-    if (result.statusCode < 200 || result.statusCode >= 300) {
-      throw new Error(`Unstructured returned status ${result.statusCode}`);
+    if (
+      typeof result !== "object" ||
+      result === null ||
+      Array.isArray(result)
+    ) {
+      throw new Error("Unstructured returned unexpected response shape");
     }
 
-    return result;
+    const body = result as { statusCode?: number; elements?: unknown[] };
+    const statusCode = body.statusCode;
+    if (typeof statusCode === "number" && (statusCode < 200 || statusCode >= 300)) {
+      throw new Error(`Unstructured returned status ${statusCode}`);
+    }
+
+    return body;
   }, 3);
 
   const elements = Array.isArray(response.elements) ? response.elements : [];

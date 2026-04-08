@@ -7,6 +7,16 @@ import {
 import { normalizeProjectName } from "@/src/lib/documents/default-project";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/** Row shape for finalize-ingest document fetch (explicit type avoids `as typeof doc` circular inference → `never`). */
+type FinalizeIngestDoc = {
+  id: string;
+  user_id: string;
+  storage_path: string;
+  markdown_content: string | null;
+  project_name: string;
+  tags: string[];
+};
+
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
@@ -38,16 +48,7 @@ export async function POST(request: NextRequest) {
   const selectCols =
     "id, user_id, storage_path, markdown_content, project_name, tags";
 
-  let doc:
-    | {
-        id: string;
-        user_id: string;
-        storage_path: string;
-        markdown_content: string | null;
-        project_name: string;
-        tags: string[];
-      }
-    | null = null;
+  let doc: FinalizeIngestDoc | null = null;
   let fetchError: { message: string } | null = null;
 
   if (isInternalCall) {
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
       .select(selectCols)
       .eq("id", documentId)
       .maybeSingle();
-    doc = res.data as typeof doc;
+    doc = res.data as FinalizeIngestDoc | null;
     fetchError = res.error;
     supabaseForIngest = supabaseAdmin;
   } else {
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
       .eq("id", documentId)
       .eq("user_id", user.id)
       .maybeSingle();
-    doc = res.data as typeof doc;
+    doc = res.data as FinalizeIngestDoc | null;
     fetchError = res.error;
     supabaseForIngest = supabase;
   }

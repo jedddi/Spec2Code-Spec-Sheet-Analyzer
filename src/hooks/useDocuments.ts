@@ -41,7 +41,9 @@ interface UseDocumentsReturn {
 }
 
 function normalizeDocumentRow(row: Partial<DocumentRecord>): DocumentRecord {
-  const rawStatus = typeof row.status === "string" ? row.status : "pending";
+  // Widen to string so legacy DB values ("ready", "error") are accepted.
+  const rawStatus: string =
+    typeof row.status === "string" ? row.status : "pending";
   const normalizedStatus: DocumentStatus = (() => {
     if (rawStatus === "ready") return "completed";
     if (rawStatus === "error") return "failed";
