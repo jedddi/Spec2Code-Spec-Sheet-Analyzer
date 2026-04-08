@@ -1,11 +1,9 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, createServerSupabase } from "@/src/lib/supabase/server";
+import { chatComplete, type ChatMessage } from "@/src/lib/ai/openrouter";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const MODEL = "gemini-3.1-flash-lite-preview";
 
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabase();
@@ -37,14 +35,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const googleApiKey = process.env.GOOGLE_API_KEY;
-  if (!googleApiKey) {
-    return NextResponse.json(
-      { error: "Missing env var GOOGLE_API_KEY" },
-      { status: 500 },
-    );
-  }
-
   try {
     const { data: chunks, error: queryError } = await supabaseAdmin
       .from("document_chunks")
@@ -69,12 +59,13 @@ export async function POST(request: NextRequest) {
 
     const fullText = chunks.map((c) => c.content).join("\n\n");
 
-    const prompt = `Write a C++ header for the hardware described in this text. Focus only on this component.\n\n${fullText}`;
-
-    const genAI = new GoogleGenerativeAI(googleApiKey);
-    const model = genAI.getGenerativeModel({ model: MODEL });
-    const result = await model.generateContent(prompt);
-    const code = result.response.text();
+    const messages: ChatMessage[] = [
+      {
+        role: "user",
+        content: `Write a C++ header for the hardware described in this text. Focus only on this component.\n\n${fullText}`,
+      },
+    ];
+    const code = await chatComplete(messages);
 
     return NextResponse.json({ code });
   } catch (err) {

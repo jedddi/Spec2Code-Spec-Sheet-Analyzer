@@ -1,6 +1,9 @@
-import React, { Suspense } from "react"
+"use client"
+
+import React, { useEffect, useState } from "react"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import type { ThemedToken } from "shiki"
 
 import { cn } from "@/lib/utils"
 import { CopyButton } from "@/components/ui/copy-button"
@@ -19,60 +22,69 @@ export function MarkdownRenderer({ children }: MarkdownRendererProps) {
   )
 }
 
-interface HighlightedPre extends React.HTMLAttributes<HTMLPreElement> {
+interface HighlightedPreProps extends React.HTMLAttributes<HTMLPreElement> {
   children: string
   language: string
 }
 
-const HighlightedPre = React.memo(
-  async ({ children, language, ...props }: HighlightedPre) => {
-    const { codeToTokens, bundledLanguages } = await import("shiki")
+function HighlightedPre({ children, language, ...props }: HighlightedPreProps) {
+  const [tokens, setTokens] = useState<ThemedToken[][] | null>(null)
 
-    if (!(language in bundledLanguages)) {
-      return <pre {...props}>{children}</pre>
-    }
+  useEffect(() => {
+    let cancelled = false
 
-    const { tokens } = await codeToTokens(children, {
-      lang: language as keyof typeof bundledLanguages,
-      defaultColor: false,
-      themes: {
-        light: "github-light",
-        dark: "github-dark",
-      },
+    import("shiki").then(({ codeToTokens, bundledLanguages }) => {
+      if (cancelled) return
+      if (!(language in bundledLanguages)) return
+
+      codeToTokens(children, {
+        lang: language as keyof typeof bundledLanguages,
+        defaultColor: false,
+        themes: { light: "github-light", dark: "github-dark" },
+      }).then(({ tokens: t }) => {
+        if (!cancelled) setTokens(t)
+      })
     })
 
-    return (
-      <pre {...props}>
-        <code>
-          {tokens.map((line, lineIndex) => (
-            <>
-              <span key={lineIndex}>
-                {line.map((token, tokenIndex) => {
-                  const style =
-                    typeof token.htmlStyle === "string"
-                      ? undefined
-                      : token.htmlStyle
+    return () => {
+      cancelled = true
+    }
+  }, [children, language])
 
-                  return (
-                    <span
-                      key={tokenIndex}
-                      className="text-shiki-light bg-shiki-light-bg dark:text-shiki-dark dark:bg-shiki-dark-bg"
-                      style={style}
-                    >
-                      {token.content}
-                    </span>
-                  )
-                })}
-              </span>
-              {lineIndex !== tokens.length - 1 && "\n"}
-            </>
-          ))}
-        </code>
-      </pre>
-    )
+  if (!tokens) {
+    return <pre {...props}>{children}</pre>
   }
-)
-HighlightedPre.displayName = "HighlightedCode"
+
+  return (
+    <pre {...props}>
+      <code>
+        {tokens.map((line, lineIndex) => (
+          <React.Fragment key={lineIndex}>
+            <span>
+              {line.map((token, tokenIndex) => {
+                const style =
+                  typeof token.htmlStyle === "string"
+                    ? undefined
+                    : token.htmlStyle
+
+                return (
+                  <span
+                    key={tokenIndex}
+                    className="text-shiki-light bg-shiki-light-bg dark:text-shiki-dark dark:bg-shiki-dark-bg"
+                    style={style}
+                  >
+                    {token.content}
+                  </span>
+                )
+              })}
+            </span>
+            {lineIndex !== tokens.length - 1 && "\n"}
+          </React.Fragment>
+        ))}
+      </code>
+    </pre>
+  )
+}
 
 interface CodeBlockProps extends React.HTMLAttributes<HTMLPreElement> {
   children: React.ReactNode
@@ -98,17 +110,9 @@ const CodeBlock = ({
 
   return (
     <div className="group/code relative mb-4">
-      <Suspense
-        fallback={
-          <pre className={preClass} {...restProps}>
-            {children}
-          </pre>
-        }
-      >
-        <HighlightedPre language={language} className={preClass}>
-          {code}
-        </HighlightedPre>
-      </Suspense>
+      <HighlightedPre language={language} className={preClass} {...restProps}>
+        {code}
+      </HighlightedPre>
 
       <div className="invisible absolute right-2 top-2 flex space-x-1 rounded-lg p-1 opacity-0 transition-all duration-200 group-hover/code:visible group-hover/code:opacity-100">
         <CopyButton content={code} copyMessage="Copied code to clipboard" />

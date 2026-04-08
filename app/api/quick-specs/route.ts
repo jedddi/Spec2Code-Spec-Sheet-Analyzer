@@ -1,11 +1,9 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, createServerSupabase } from "@/src/lib/supabase/server";
+import { chatComplete, type ChatMessage } from "@/src/lib/ai/openrouter";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const MODEL = "gemini-3.1-flash-lite-preview";
 
 const SYSTEM_PROMPT = `You are a Hardware Validation Engineer. Extract technical specifications from the provided datasheet text. You MUST return the data in a clean Markdown table with the following columns: Parameter, Value, and Notes.
 Focus on:
@@ -49,14 +47,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const googleApiKey = process.env.GOOGLE_API_KEY;
-  if (!googleApiKey) {
-    return NextResponse.json(
-      { error: "Missing env var GOOGLE_API_KEY" },
-      { status: 500 },
-    );
-  }
-
   try {
     const { data: chunks, error: queryError } = await supabaseAdmin
       .from("document_chunks")
@@ -81,12 +71,11 @@ export async function POST(request: NextRequest) {
 
     const fullText = chunks.map((c) => c.content).join("\n\n");
 
-    const prompt = `${SYSTEM_PROMPT}\n\nDatasheet text:\n${fullText}`;
-
-    const genAI = new GoogleGenerativeAI(googleApiKey);
-    const model = genAI.getGenerativeModel({ model: MODEL });
-    const result = await model.generateContent(prompt);
-    const specs = result.response.text();
+    const messages: ChatMessage[] = [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: `Datasheet text:\n${fullText}` },
+    ];
+    const specs = await chatComplete(messages);
 
     return NextResponse.json({ specs });
   } catch (err) {
