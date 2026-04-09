@@ -10,6 +10,11 @@ import PromptInputV2 from "@/src/components/v2/PromptInputV2";
 import BentoGridV2 from "@/src/components/v2/BentoGridV2";
 import ChatMessageList from "@/src/components/v2/ChatMessageList";
 import UploadPdf from "@/src/components/UploadPdf";
+import {
+  fadeScaleItem,
+  homeHeroVariants,
+  staggerContainer,
+} from "@/src/components/v2/chat/new-chat-motion";
 import { useChatV2 } from "@/src/hooks/useChatV2";
 import { useAuth } from "@/src/hooks/useAuth";
 import { useChatSessions } from "@/src/hooks/useChatSessions";
@@ -134,34 +139,46 @@ export default function HomePage() {
           {!chat.isActive && (
             <motion.div
               key="static-home"
-              initial={{ opacity: 1 }}
-              exit={{ opacity: 0, scale: 0.97 }}
-              transition={{ duration: 0.25 }}
-              className="flex flex-1 flex-col overflow-y-auto px-4 pb-10"
+              variants={homeHeroVariants}
+              initial="visible"
+              animate="visible"
+              exit="exit"
+              className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-4 pb-10"
             >
-              <ChatInterfaceV2 />
+              <motion.div
+                className="flex flex-col"
+                variants={staggerContainer}
+                initial="hidden"
+                animate="visible"
+              >
+                <ChatInterfaceV2 />
 
-              <motion.div layoutId="prompt-input" className="mt-11">
-                <PromptInputV2
-                  ref={promptTextareaRef}
-                  value={chat.input}
-                  onChange={chat.handleInputChange}
-                  onSubmit={chat.handleSubmit}
-                  isSending={chat.isSending}
+                <motion.div
+                  layoutId="prompt-input"
+                  variants={fadeScaleItem}
+                  className="mt-11"
+                >
+                  <PromptInputV2
+                    ref={promptTextareaRef}
+                    value={chat.input}
+                    onChange={chat.handleInputChange}
+                    onSubmit={chat.handleSubmit}
+                    isSending={chat.isSending}
+                  />
+                </motion.div>
+
+                <BentoGridV2
+                  prompts={DEFAULT_PROMPTS}
+                  onSelect={(text) => {
+                    chat.applyQuickPrompt(text);
+                    queueMicrotask(() => {
+                      promptTextareaRef.current?.focus();
+                      const len = text.length;
+                      promptTextareaRef.current?.setSelectionRange(len, len);
+                    });
+                  }}
                 />
               </motion.div>
-
-              <BentoGridV2
-                prompts={DEFAULT_PROMPTS}
-                onSelect={(text) => {
-                  chat.applyQuickPrompt(text);
-                  queueMicrotask(() => {
-                    promptTextareaRef.current?.focus();
-                    const len = text.length;
-                    promptTextareaRef.current?.setSelectionRange(len, len);
-                  });
-                }}
-              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -169,10 +186,10 @@ export default function HomePage() {
         {chat.isActive && (
           <motion.div
             key="active-chat"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3, delay: 0.1 }}
-            className="flex min-h-0 flex-1 flex-col"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 320, damping: 32 }}
+            className="flex min-h-0 flex-1 flex-col overflow-x-hidden"
           >
             <ChatMessageList
               messages={chat.messages}

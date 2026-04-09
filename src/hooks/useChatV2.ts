@@ -5,6 +5,10 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserSupabase } from "@/src/lib/supabase/client";
 import { createMockChatResponse } from "@/src/lib/chat/mock-ui-chat-response";
+import {
+  clearPendingChatHandoff,
+  hasPendingChatHandoff,
+} from "@/src/lib/chat/handoff";
 import { getTextFromUIMessage } from "@/src/lib/chat/ui-message-text";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { ChatSession } from "./useChatSessions";
@@ -131,7 +135,10 @@ export function useChatV2({
 }: UseChatV2Options = {}) {
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  /** True on first paint when opening a session so handoff auto-send cannot run before DB hydration. */
+  const [isLoadingHistory, setIsLoadingHistory] = useState(
+    () => sessionId != null && sessionId !== "",
+  );
   const [citationEpoch, setCitationEpoch] = useState(0);
   const [serverPhase, setServerPhase] = useState<ChatLoadingPhase>(null);
 
@@ -159,8 +166,9 @@ export function useChatV2({
     mockModeRef.current = mockMode;
   }, [mockMode]);
 
+  /** Never clear session id when URL still shows /chat with no id (race with createSession + router.push). */
   useEffect(() => {
-    currentSessionIdRef.current = sessionId ?? null;
+    if (sessionId) currentSessionIdRef.current = sessionId;
   }, [sessionId]);
 
   const chatId = useMemo(
@@ -173,9 +181,11 @@ export function useChatV2({
       sid: string,
       msg: { id: string; role: string; content: string; citations?: Citation[] },
     ) => {
-      await supabase.from("chat_messages").upsert(
+      const isUUID =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(msg.id);
+      const { error: upsertError } = await supabase.from("chat_messages").upsert(
         {
-          id: msg.id,
+          id: isUUID ? msg.id : crypto.randomUUID(),
           session_id: sid,
           role: msg.role,
           content: msg.content,
@@ -183,6 +193,9 @@ export function useChatV2({
         },
         { onConflict: "id" },
       );
+      if (upsertError) {
+        console.error("[persistMessage] upsert failed:", upsertError.message, { sid, role: msg.role, id: msg.id });
+      }
     },
     [supabase],
   );
@@ -216,6 +229,7 @@ export function useChatV2({
     useChat<AppChatUIMessage>({
       id: chatId,
       transport,
+      generateId: () => crypto.randomUUID(),
       onData: (part) => {
         if (part.type === "data-chatPhase") {
           setServerPhase(part.data.phase);
@@ -256,6 +270,8 @@ export function useChatV2({
             content: text,
             citations: citationsSnapshot.length ? citationsSnapshot : undefined,
           });
+
+          clearPendingChatHandoff(sid);
 
           setUiMessages((prev) =>
             prev.map((m) =>
@@ -300,9 +316,13 @@ export function useChatV2({
       },
     });
 
+  const setUiMessagesRef = useRef(setUiMessages);
+  setUiMessagesRef.current = setUiMessages;
+
   useEffect(() => {
     if (!sessionId) {
-      setUiMessages([]);
+      currentSessionIdRef.current = null;
+      setUiMessagesRef.current([]);
       autoTriggeredRef.current = false;
       setIsLoadingHistory(false);
       return;
@@ -322,9 +342,13 @@ export function useChatV2({
       if (cancelled) return;
 
       if (!fetchError && data && data.length > 0) {
-        setUiMessages(data.map(rowToUIMessage));
+        const lastRow = data[data.length - 1];
+        if (lastRow.role === "assistant") {
+          clearPendingChatHandoff(sessionId);
+        }
+        setUiMessagesRef.current(data.map(rowToUIMessage));
       } else {
-        setUiMessages([]);
+        setUiMessagesRef.current([]);
       }
       setIsLoadingHistory(false);
     })();
@@ -332,7 +356,7 @@ export function useChatV2({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, supabase, setUiMessages]);
+  }, [sessionId, supabase]);
 
   const messages: ChatMessageV2[] = useMemo(() => {
     void citationEpoch;
@@ -408,7 +432,7 @@ export function useChatV2({
               role: "user",
               content: trimmed,
             });
-            const params = new URLSearchParams({ id: sid });
+            const params = new URLSearchParams({ id: sid, handoff: "1" });
             if (mockMode) params.set("mock", "1");
             router.push(`/chat?${params.toString()}`);
             return;
@@ -451,6 +475,9 @@ export function useChatV2({
     const last = uiMessages[uiMessages.length - 1];
     if (last.role !== "user") return;
 
+    if (!hasPendingChatHandoff(sessionId)) return;
+
+    clearPendingChatHandoff(sessionId);
     autoTriggeredRef.current = true;
     inFlightRef.current = true;
 
@@ -464,7 +491,7 @@ export function useChatV2({
         const message =
           err instanceof Error ? err.message : "Unknown chat error";
         setError(message);
-        setUiMessages((prev) => {
+        setUiMessagesRef.current((prev) => {
           const lastIdx = prev.length - 1;
           const lastM = prev[lastIdx];
           if (lastM?.role === "user") {
@@ -495,7 +522,6 @@ export function useChatV2({
     sessionId,
     redirectOnly,
     sendMessage,
-    setUiMessages,
   ]);
 
   const handleSubmit = useCallback(
