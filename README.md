@@ -19,14 +19,17 @@ flowchart TD
   appUi --> supabaseAuth[SupabaseAuth]
   appUi --> storage[SupabaseStorage]
   appUi --> insertPending[InsertDocumentsPending]
-  insertPending --> dbWebhook[SupabaseDbWebhook]
-  dbWebhook --> ingestFn[SupabaseEdgeFunction]
-  ingestFn --> unstructured[UnstructuredApi]
-  ingestFn --> documentsTable[documents status+markdown]
+  insertPending --> queueApi[QueueApi /api/documents/queue]
+  queueApi --> inngestSend[InngestSend]
+  inngestSend --> inngestWorker[InngestWorker /api/inngest]
+  inngestWorker --> unstructured[UnstructuredApi]
+  inngestWorker --> embed[EmbeddingsOpenRouter]
+  inngestWorker --> chunkTable[document_chunks]
+  inngestWorker --> documentsTable[documents status+markdown]
   documentsTable --> realtime[SupabaseRealtime]
   realtime --> appUi
-  appUi --> ingestApi[ManualIngestApi Optional]
-  ingestApi --> chunkTable[document_chunks]
+  appUi --> finalizeApi[FinalizeIngestManual Optional]
+  finalizeApi --> chunkTable
   appUi --> chatApi[ChatApi]
   chatApi --> matchRpc[match_document_chunks]
   matchRpc --> chunkTable
@@ -39,11 +42,11 @@ flowchart TD
 
 1. User signs in with Supabase Auth.
 2. User uploads PDF(s) into Supabase bucket `Spec-sheets` under `uploads/<user_id>/...`.
-3. Client inserts a `documents` row with status `pending`, then returns immediately.
-4. Supabase DB webhook triggers the `ingest-document` Edge Function, which updates `pending -> processing -> completed/failed`.
-5. The Edge Function parses PDFs with Unstructured and stores markdown in `documents.markdown_content`.
-6. Frontend listens via Supabase Realtime and updates status without waiting for parsing.
-7. Chat/Quick Specs/Header APIs can still use the manual ingest/indexing path and `document_chunks`.
+3. Client inserts a `documents` row with status `pending`, then calls **`/api/documents/queue`** to emit an Inngest event.
+4. The **Inngest** job (`document/ingest.requested`) runs on your app: **Unstructured** (markdown) or **pdf-parse** fallback, then **embeddings + `document_chunks`**, updating **`documents`** to `completed` / `failed` in one pipeline.
+5. Frontend listens via Supabase Realtime and updates status without blocking on parsing.
+6. **Disable** the legacy Supabase DB webhook for `documents` after cutover (otherwise Edge + Inngest would both run). See [implementation_plan.md](implementation_plan.md).
+7. Chat/Quick Specs/Header APIs use `document_chunks`; **`/api/documents/finalize-ingest`** remains available as a manual repair path if needed.
 
 ## Tech Stack
 
@@ -71,7 +74,13 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 OPENROUTER_API_KEY=your_openrouter_api_key
 UNSTRUCTURED_API_KEY=your_unstructured_api_key
-# Optional: verify DB webhook requests (set as Edge secret INGEST_WEBHOOK_SECRET — not SUPABASE_* — see README Supabase section)
+
+# Inngest (production / hosted deploy). Local: run `npx inngest-cli@latest dev` with your Next dev server.
+# INNGEST_EVENT_KEY=…        # used when your app calls inngest.send (e.g. /api/documents/queue)
+# INNGEST_SIGNING_KEY=…     # used by serve() on /api/inngest so Inngest Cloud can authenticate to your app
+# See also [.env.example](.env.example).
+
+# Optional: verify DB webhook requests (legacy Edge path — set as Edge secret INGEST_WEBHOOK_SECRET — not SUPABASE_*)
 # INGEST_WEBHOOK_SECRET=choose_a_long_random_secret
 
 # Optional model overrides (defaults shown):

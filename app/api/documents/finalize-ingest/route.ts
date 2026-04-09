@@ -1,3 +1,8 @@
+/**
+ * Manual repair / legacy path: indexes `document_chunks` from existing `markdown_content` or PDF fallback.
+ * Primary ingestion runs in the Inngest job (`document/ingest.requested`) after `/api/documents/queue`.
+ * Edge + `INGEST_FINALIZE_URL` may still call this until webhooks are fully retired.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase, supabaseAdmin } from "@/src/lib/supabase/server";
 import {

@@ -101,26 +101,50 @@ export default function UploadPdf({
         : [];
       const fileUrl = `${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${entry.storagePath}`;
 
-      const { error } = await supabase.from("documents").upsert(
-        {
-          user_id: userId,
-          storage_path: entry.storagePath,
-          file_url: fileUrl,
-          filename: entry.file.name,
-          file_size: entry.file.size,
-          project_name: projectName?.trim() || undefined,
-          tags: normalizedTags,
-          status: "pending",
-          markdown_content: null,
-          error_log: null,
-          error_message: null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,storage_path" },
-      );
+      const { data: upserted, error } = await supabase
+        .from("documents")
+        .upsert(
+          {
+            user_id: userId,
+            storage_path: entry.storagePath,
+            file_url: fileUrl,
+            filename: entry.file.name,
+            file_size: entry.file.size,
+            project_name: projectName?.trim() || undefined,
+            tags: normalizedTags,
+            status: "pending",
+            markdown_content: null,
+            error_log: null,
+            error_message: null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,storage_path" },
+        )
+        .select("id")
+        .single();
 
       if (error) {
         throw new Error(error.message);
+      }
+
+      const documentId = upserted?.id;
+      if (!documentId) {
+        throw new Error("Upsert did not return document id");
+      }
+
+      const queueRes = await fetch("/api/documents/queue", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId }),
+      });
+      if (!queueRes.ok) {
+        const detail = (await queueRes.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(
+          detail.error || `Queue failed (${queueRes.status})`,
+        );
       }
     },
     [projectName, supabase, tags, userId],
@@ -375,7 +399,7 @@ export default function UploadPdf({
               dragging ? dropActive : (!isSidebar ? "border-[#4285f4] bg-[#f8faff]" : dropBase),
             )}
           >
-            <CloudUpload 
+            <CloudUpload
               className={cn(
                 "mb-3",
                 isSidebar ? "h-9 w-9" : "h-14 w-14",
@@ -449,9 +473,9 @@ export default function UploadPdf({
                   )}
                 >
                   <svg width="36" height="42" viewBox="0 0 40 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M4 8C4 5.79086 5.79086 4 8 4H24L36 16V40C36 42.2091 34.2091 44 32 44H8C5.79086 44 4 42.2091 4 40V8Z" stroke="#4a5568" strokeWidth="3" strokeLinejoin="round"/>
-                    <path d="M24 4V16H36" stroke="#4a5568" strokeWidth="3" strokeLinejoin="round"/>
-                    <rect x="0" y="26" width="40" height="14" fill="white"/>
+                    <path d="M4 8C4 5.79086 5.79086 4 8 4H24L36 16V40C36 42.2091 34.2091 44 32 44H8C5.79086 44 4 42.2091 4 40V8Z" stroke="#4a5568" strokeWidth="3" strokeLinejoin="round" />
+                    <path d="M24 4V16H36" stroke="#4a5568" strokeWidth="3" strokeLinejoin="round" />
+                    <rect x="0" y="26" width="40" height="14" fill="white" />
                     <text x="20" y="38" fontSize="14" fontWeight="900" fill="#2b6ced" textAnchor="middle" fontFamily="sans-serif">PDF</text>
                   </svg>
                 </div>

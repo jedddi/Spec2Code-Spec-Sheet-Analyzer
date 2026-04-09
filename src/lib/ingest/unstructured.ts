@@ -89,26 +89,25 @@ export async function partitionPdfToMarkdown(params: {
       },
     });
 
-    if (
-      typeof result !== "object" ||
-      result === null ||
-      Array.isArray(result)
-    ) {
-      throw new Error("Unstructured returned unexpected response shape");
+    // `unstructured-client` v0.31 returns either:
+    // - a string (raw text/HTML), or
+    // - an array of elements (records)
+    if (typeof result === "string") {
+      // We don't have structured elements; treat as already-extracted text.
+      // Downstream expects markdown.
+      return { elements: [], markdown: result };
     }
 
-    const body = result as { statusCode?: number; elements?: unknown[] };
-    const statusCode = body.statusCode;
-    if (typeof statusCode === "number" && (statusCode < 200 || statusCode >= 300)) {
-      throw new Error(`Unstructured returned status ${statusCode}`);
+    if (!Array.isArray(result)) {
+      const type = Object.prototype.toString.call(result);
+      throw new Error(`Unstructured returned unexpected type: ${type}`);
     }
 
-    return body;
+    return { elements: result, markdown: unstructuredElementsToMarkdown(result) };
   }, 3);
 
-  const elements = Array.isArray(response.elements) ? response.elements : [];
   return {
-    elements,
-    markdown: unstructuredElementsToMarkdown(elements),
+    elements: response.elements,
+    markdown: response.markdown.trim(),
   };
 }

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/src/lib/supabase/server";
+import { inngest } from "@/src/lib/inngest/client";
 
 export const runtime = "nodejs";
 
 /**
- * Re-invokes the `ingest-document` Edge Function with a webhook-shaped payload.
- * Use when a row is stuck in `processing` (e.g. first webhook delivery died mid-flight
- * and INSERT does not fire again).
+ * Re-queues ingestion via Inngest for a document the user owns.
+ * Use when a row is stuck in `processing` (e.g. worker died mid-run) or after `failed` to retry.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabase();
@@ -49,54 +49,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Document not found" }, { status: 404 });
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!baseUrl || !anon) {
-    return NextResponse.json(
-      { error: "Server missing Supabase URL or anon key" },
-      { status: 500 },
-    );
-  }
-
-  const webhookSecret = process.env.INGEST_WEBHOOK_SECRET;
-
-  const fnUrl = `${baseUrl}/functions/v1/ingest-document`;
-  const res = await fetch(fnUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: anon,
-      Authorization: `Bearer ${anon}`,
-      ...(webhookSecret
-        ? { "x-webhook-secret": webhookSecret }
-        : {}),
-    },
-    body: JSON.stringify({
-      type: "INSERT",
-      table: "documents",
-      schema: "public",
-      record: { id: doc.id },
-    }),
+  await inngest.send({
+    name: "document/ingest.requested",
+    data: { documentId: doc.id },
   });
 
-  const text = await res.text();
-  let payload: Record<string, unknown>;
-  try {
-    payload = JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    payload = { raw: text.slice(0, 500) };
-  }
-
-  if (!res.ok) {
-    return NextResponse.json(
-      {
-        error: "Edge function error",
-        status: res.status,
-        detail: payload,
-      },
-      { status: 502 },
-    );
-  }
-
-  return NextResponse.json({ ok: true, edge: payload });
+  return NextResponse.json({ ok: true, documentId: doc.id });
 }
