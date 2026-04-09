@@ -3,17 +3,22 @@
 import { Sparkles, TriangleAlert } from "lucide-react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { CitationsDropdown } from "@/src/components/chat-citations";
-import type { ChatMessageV2 } from "@/src/hooks/useChatV2";
+import type { ChatLoadingPhase, ChatMessageV2 } from "@/src/hooks/useChatV2";
+import LoadingStatus from "./LoadingStatus";
 
 interface ChatMessageBubbleProps {
   message: ChatMessageV2;
+  loadingPhase?: ChatLoadingPhase;
 }
 
-export default function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
+export default function ChatMessageBubble({
+  message,
+  loadingPhase = null,
+}: ChatMessageBubbleProps) {
   if (message.role === "user") {
     return <UserBubble content={message.content} />;
   }
-  return <AssistantBubble message={message} />;
+  return <AssistantBubble message={message} loadingPhase={loadingPhase} />;
 }
 
 function UserBubble({ content }: { content: string }) {
@@ -29,7 +34,13 @@ function UserBubble({ content }: { content: string }) {
   );
 }
 
-function AssistantBubble({ message }: { message: ChatMessageV2 }) {
+function AssistantBubble({
+  message,
+  loadingPhase,
+}: {
+  message: ChatMessageV2;
+  loadingPhase: ChatLoadingPhase;
+}) {
   const { content, citations, lowConfidence } = message;
   const isEmpty = !content;
   const hasSources = citations && citations.length > 0;
@@ -51,7 +62,10 @@ function AssistantBubble({ message }: { message: ChatMessageV2 }) {
 
         <div className="pl-5">
           {isEmpty ? (
-            <TypingIndicator />
+            <div className="space-y-2 py-1">
+              <LoadingStatus phase={loadingPhase} />
+              <TypingIndicator />
+            </div>
           ) : (
             <div className="prose-v2 max-w-none text-base leading-relaxed text-[#4f5059]/80">
               <MarkdownRenderer>{content}</MarkdownRenderer>

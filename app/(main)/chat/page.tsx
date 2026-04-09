@@ -58,6 +58,7 @@ function ChatPageContent() {
           <ChatMessageList
             messages={chat.messages}
             isWaitingForFirstToken={chat.isWaitingForFirstToken}
+            loadingPhase={chat.loadingPhase}
           />
         )}
 

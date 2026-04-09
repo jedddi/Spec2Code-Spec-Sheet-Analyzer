@@ -177,6 +177,7 @@ export default function HomePage() {
             <ChatMessageList
               messages={chat.messages}
               isWaitingForFirstToken={chat.isWaitingForFirstToken}
+              loadingPhase={chat.loadingPhase}
             />
 
             <div className="shrink-0 px-4 pb-4 pt-3">

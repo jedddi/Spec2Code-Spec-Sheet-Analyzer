@@ -1,7 +1,11 @@
 "use client";
 
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserSupabase } from "@/src/lib/supabase/client";
+import { createMockChatResponse } from "@/src/lib/chat/mock-ui-chat-response";
+import { getTextFromUIMessage } from "@/src/lib/chat/ui-message-text";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { ChatSession } from "./useChatSessions";
 
@@ -20,6 +24,19 @@ export type ChatMessageV2 = {
   citations?: Citation[];
   lowConfidence?: boolean;
 };
+
+export type ChatLoadingPhase = "searching" | "analyzing" | "writing" | null;
+
+type ChatDataTypes = {
+  chatPhase: { phase: "searching" | "analyzing" | "writing" };
+};
+
+type ChatMessageMetadata = {
+  citations?: Citation[];
+  lowConfidence?: boolean;
+};
+
+export type AppChatUIMessage = UIMessage<ChatMessageMetadata, ChatDataTypes>;
 
 interface UseChatV2Options {
   mockMode?: boolean;
@@ -78,6 +95,31 @@ function parseCitations(header: string | null): Citation[] {
   }
 }
 
+function rowToUIMessage(row: {
+  id: string;
+  role: string;
+  content: string;
+  citations: unknown;
+}): AppChatUIMessage {
+  const role = row.role as "user" | "assistant";
+  const citations = row.citations as Citation[] | null;
+  return {
+    id: row.id as string,
+    role,
+    parts: [
+      {
+        type: "text",
+        text: row.content as string,
+        state: "done",
+      },
+    ],
+    metadata:
+      role === "assistant" && citations && citations.length > 0
+        ? { citations }
+        : undefined,
+  };
+}
+
 export function useChatV2({
   mockMode = false,
   sessionId = null,
@@ -87,60 +129,44 @@ export function useChatV2({
   refetchSessions,
   redirectOnly = false,
 }: UseChatV2Options = {}) {
-  const [messages, setMessages] = useState<ChatMessageV2[]>([]);
   const [input, setInput] = useState("");
-  const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isWaitingForFirstToken, setIsWaitingForFirstToken] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [citationEpoch, setCitationEpoch] = useState(0);
+  const [serverPhase, setServerPhase] = useState<ChatLoadingPhase>(null);
+
   const inFlightRef = useRef(false);
   const currentSessionIdRef = useRef<string | null>(sessionId ?? null);
   const autoTriggeredRef = useRef(false);
+  const mockModeRef = useRef(mockMode);
+  const citationsRef = useRef<Citation[]>([]);
+  const lowConfidenceRef = useRef(false);
   const supabase = useMemo(() => createBrowserSupabase(), []);
+  const persistMessageRef = useRef<
+    | ((
+        sid: string,
+        msg: {
+          id: string;
+          role: string;
+          content: string;
+          citations?: Citation[];
+        },
+      ) => Promise<void>)
+    | null
+  >(null);
 
-  const isActive = messages.length > 0;
+  useEffect(() => {
+    mockModeRef.current = mockMode;
+  }, [mockMode]);
 
   useEffect(() => {
     currentSessionIdRef.current = sessionId ?? null;
   }, [sessionId]);
 
-  // Load existing messages when sessionId is provided
-  useEffect(() => {
-    if (!sessionId) return;
-
-    let cancelled = false;
-    setIsLoadingHistory(true);
-    autoTriggeredRef.current = false;
-
-    (async () => {
-      const { data, error: fetchError } = await supabase
-        .from("chat_messages")
-        .select("id, role, content, citations, created_at")
-        .eq("session_id", sessionId)
-        .order("created_at", { ascending: true });
-
-      if (cancelled) return;
-
-      if (!fetchError && data && data.length > 0) {
-        setMessages(
-          data.map((row) => ({
-            id: row.id as string,
-            role: row.role as "user" | "assistant",
-            content: row.content as string,
-            citations: (row.citations as Citation[] | null) ?? undefined,
-          })),
-        );
-      }
-      setIsLoadingHistory(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId, supabase]);
-
-  const handleInputChange: React.ChangeEventHandler<HTMLTextAreaElement> =
-    useCallback((e) => setInput(e.target.value), []);
+  const chatId = useMemo(
+    () => sessionId ?? `draft-${userId ?? "anon"}`,
+    [sessionId, userId],
+  );
 
   const persistMessage = useCallback(
     async (
@@ -161,132 +187,211 @@ export function useChatV2({
     [supabase],
   );
 
-  /**
-   * Core function that streams from /api/chat (or mock) and persists the
-   * assistant response. Called by submitQuery for normal flow, and by the
-   * auto-trigger effect for the home→chat handoff.
-   */
-  const streamResponse = useCallback(
-    async (
-      query: string,
-      assistantMessageId: string,
-      sid: string,
-    ) => {
-      if (mockMode) {
-        await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
-        setIsWaitingForFirstToken(false);
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId
-              ? { ...msg, content: MOCK_RESPONSE }
-              : msg,
-          ),
-        );
-        await persistMessage(sid, {
-          id: assistantMessageId,
-          role: "assistant",
-          content: MOCK_RESPONSE,
-        });
-        return;
-      }
+  persistMessageRef.current = persistMessage;
 
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      });
-
-      const responseCitations = parseCitations(
-        response.headers.get("x-chat-sources"),
-      );
-      const responseLowConfidence =
-        response.headers.get("x-chat-confidence") === "low";
-
-      if (!response.ok) {
-        let message = "Chat request failed";
-        try {
-          const payload = (await response.json()) as { error?: string };
-          message = payload.error ?? message;
-        } catch {
-          /* non-JSON body */
-        }
-        throw new Error(message);
-      }
-
-      if (!response.body) {
-        throw new Error("No response stream received from chat API.");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = "";
-      let sawFirstToken = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        if (!chunk) continue;
-
-        sawFirstToken = true;
-        setIsWaitingForFirstToken(false);
-        accumulated += chunk;
-
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId
-              ? { ...msg, content: accumulated, citations: responseCitations, lowConfidence: responseLowConfidence }
-              : msg,
-          ),
-        );
-      }
-
-      const finalContent = sawFirstToken
-        ? accumulated
-        : "I don't have enough information.";
-
-      if (!sawFirstToken) {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId
-              ? { ...msg, content: finalContent, citations: responseCitations, lowConfidence: responseLowConfidence }
-              : msg,
-          ),
-        );
-      }
-
-      await persistMessage(sid, {
-        id: assistantMessageId,
-        role: "assistant",
-        content: finalContent,
-        citations: responseCitations,
-      });
-    },
-    [mockMode, persistMessage],
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport<AppChatUIMessage>({
+        api: "/api/chat",
+        fetch: async (input, init) => {
+          if (mockModeRef.current) {
+            return createMockChatResponse(MOCK_RESPONSE, MOCK_DELAY_MS);
+          }
+          const res = await fetch(input, init);
+          if (res.ok) {
+            citationsRef.current = parseCitations(
+              res.headers.get("x-chat-sources"),
+            );
+            lowConfidenceRef.current =
+              res.headers.get("x-chat-confidence") === "low";
+            setCitationEpoch((e) => e + 1);
+          }
+          return res;
+        },
+      }),
+    [],
   );
+
+  const { messages: uiMessages, sendMessage, setMessages: setUiMessages, status } =
+    useChat<AppChatUIMessage>({
+      id: chatId,
+      transport,
+      onData: (part) => {
+        if (part.type === "data-chatPhase") {
+          setServerPhase(part.data.phase);
+        }
+      },
+      onFinish: async ({ messages: allMessages }) => {
+        setServerPhase(null);
+        const sid = currentSessionIdRef.current;
+        const citationsSnapshot = [...citationsRef.current];
+        const lowSnap = lowConfidenceRef.current;
+        citationsRef.current = [];
+        lowConfidenceRef.current = false;
+
+        const persist = persistMessageRef.current;
+        if (!sid || !persist) return;
+
+        const n = allMessages.length;
+        if (n < 2) return;
+
+        const assistantMsg = allMessages[n - 1];
+        const userMsg = allMessages[n - 2];
+
+        if (userMsg?.role === "user") {
+          await persist(sid, {
+            id: userMsg.id,
+            role: "user",
+            content: getTextFromUIMessage(userMsg),
+          });
+        }
+
+        if (assistantMsg?.role === "assistant") {
+          const text =
+            getTextFromUIMessage(assistantMsg).trim() ||
+            "I don't have enough information.";
+          await persist(sid, {
+            id: assistantMsg.id,
+            role: "assistant",
+            content: text,
+            citations: citationsSnapshot.length ? citationsSnapshot : undefined,
+          });
+
+          setUiMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsg.id
+                ? {
+                    ...m,
+                    metadata: {
+                      citations: citationsSnapshot.length
+                        ? citationsSnapshot
+                        : m.metadata?.citations,
+                      lowConfidence: lowSnap,
+                    },
+                  }
+                : m,
+            ),
+          );
+        }
+      },
+      onError: (err) => {
+        setServerPhase(null);
+        setError(err.message ?? "Chat error");
+        setUiMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant") {
+            return prev.map((m, i) =>
+              i === prev.length - 1
+                ? {
+                    ...m,
+                    parts: [
+                      {
+                        type: "text",
+                        text: "I don't have enough information.",
+                        state: "done",
+                      },
+                    ],
+                  }
+                : m,
+            );
+          }
+          return prev;
+        });
+      },
+    });
+
+  useEffect(() => {
+    if (!sessionId) {
+      setUiMessages([]);
+      autoTriggeredRef.current = false;
+      setIsLoadingHistory(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingHistory(true);
+    autoTriggeredRef.current = false;
+
+    void (async () => {
+      const { data, error: fetchError } = await supabase
+        .from("chat_messages")
+        .select("id, role, content, citations, created_at")
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: true });
+
+      if (cancelled) return;
+
+      if (!fetchError && data && data.length > 0) {
+        setUiMessages(data.map(rowToUIMessage));
+      } else {
+        setUiMessages([]);
+      }
+      setIsLoadingHistory(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, supabase, setUiMessages]);
+
+  const messages: ChatMessageV2[] = useMemo(() => {
+    void citationEpoch;
+    return uiMessages.map((m, i) => {
+      const content = getTextFromUIMessage(m);
+      const meta = m.metadata;
+      const isLastAssistant = m.role === "assistant" && i === uiMessages.length - 1;
+      let citations = meta?.citations;
+      let lowConfidence = meta?.lowConfidence;
+      if (
+        isLastAssistant &&
+        citationsRef.current.length > 0 &&
+        (status === "streaming" || status === "submitted")
+      ) {
+        citations = citationsRef.current;
+        lowConfidence = lowConfidenceRef.current;
+      }
+      return {
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content,
+        citations,
+        lowConfidence,
+      };
+    });
+  }, [uiMessages, status, citationEpoch]);
+
+  const loadingPhase: ChatLoadingPhase = useMemo(() => {
+    const last = uiMessages[uiMessages.length - 1];
+    if (last?.role === "assistant" && getTextFromUIMessage(last).length > 0) {
+      return "writing";
+    }
+    if (serverPhase) return serverPhase;
+    if (status === "submitted") return "searching";
+    if (status === "streaming" && last?.role === "assistant") return "analyzing";
+    return null;
+  }, [serverPhase, status, uiMessages]);
+
+  const isSending = status === "submitted" || status === "streaming";
+  const isWaitingForFirstToken =
+    status === "streaming" &&
+    uiMessages[uiMessages.length - 1]?.role === "assistant" &&
+    getTextFromUIMessage(uiMessages[uiMessages.length - 1]!).length === 0;
+
+  const isActive = messages.length > 0;
+
+  const handleInputChange: React.ChangeEventHandler<HTMLTextAreaElement> =
+    useCallback((e) => setInput(e.target.value), []);
 
   const submitQuery = useCallback(
     (trimmed: string) => {
       if (!trimmed || inFlightRef.current) return;
       inFlightRef.current = true;
-
-      const userMessageId = crypto.randomUUID();
-      const assistantMessageId = crypto.randomUUID();
-
       setError(null);
-      setIsSending(true);
-      setIsWaitingForFirstToken(true);
-      setMessages((prev) => [
-        ...prev,
-        { id: userMessageId, role: "user", content: trimmed },
-        { id: assistantMessageId, role: "assistant", content: "" },
-      ]);
 
       void (async () => {
         try {
           let sid = currentSessionIdRef.current;
 
-          // If no session yet (home page), create one titled with the first message
           if (!sid && createSession) {
             const title = trimmed.substring(0, SESSION_TITLE_MAX_LEN);
             const session = await createSession(title);
@@ -297,27 +402,18 @@ export function useChatV2({
             }
           }
 
-          // Persist user message
-          if (sid) {
+          if (redirectOnly && sid && router) {
             await persistMessage(sid, {
-              id: userMessageId,
+              id: crypto.randomUUID(),
               role: "user",
               content: trimmed,
             });
-          }
-
-          // redirectOnly: create session + persist + navigate, then stop.
-          // The chat page will auto-trigger the RAG call on mount.
-          // Pass mock flag so the chat page inherits the current mock state.
-          if (redirectOnly && sid && router) {
             const params = new URLSearchParams({ id: sid });
             if (mockMode) params.set("mock", "1");
             router.push(`/chat?${params.toString()}`);
             return;
           }
 
-          // If we created a session from a non-redirectOnly page (shouldn't
-          // happen normally), still redirect but continue streaming
           if (sid && router && !sessionId) {
             router.push(`/chat?id=${sid}`);
           }
@@ -326,22 +422,13 @@ export function useChatV2({
             throw new Error("Could not create chat session.");
           }
 
-          await streamResponse(trimmed, assistantMessageId, sid);
+          await sendMessage({ text: trimmed });
         } catch (err) {
           const message =
             err instanceof Error ? err.message : "Unknown chat error";
           setError(message);
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantMessageId
-                ? { ...msg, content: "I don't have enough information." }
-                : msg,
-            ),
-          );
         } finally {
           inFlightRef.current = false;
-          setIsSending(false);
-          setIsWaitingForFirstToken(false);
         }
       })();
     },
@@ -352,54 +439,64 @@ export function useChatV2({
       createSession,
       refetchSessions,
       persistMessage,
-      streamResponse,
+      sendMessage,
+      mockMode,
     ],
   );
 
-  // Auto-trigger: when history finishes loading and the last message is a
-  // user message (no assistant reply yet), fire the RAG call automatically.
-  // This handles the handoff from the home page redirect.
   useEffect(() => {
     if (isLoadingHistory || autoTriggeredRef.current || redirectOnly) return;
-    if (messages.length === 0 || !sessionId) return;
+    if (uiMessages.length === 0 || !sessionId) return;
 
-    const lastMsg = messages[messages.length - 1];
-    if (lastMsg.role !== "user") return;
+    const last = uiMessages[uiMessages.length - 1];
+    if (last.role !== "user") return;
 
     autoTriggeredRef.current = true;
     inFlightRef.current = true;
 
-    const assistantMessageId = crypto.randomUUID();
-    const query = lastMsg.content;
-
-    setIsSending(true);
-    setIsWaitingForFirstToken(true);
-    setMessages((prev) => [
-      ...prev,
-      { id: assistantMessageId, role: "assistant", content: "" },
-    ]);
-
     void (async () => {
       try {
-        await streamResponse(query, assistantMessageId, sessionId);
+        await sendMessage({
+          text: getTextFromUIMessage(last),
+          messageId: last.id,
+        });
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Unknown chat error";
         setError(message);
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId
-              ? { ...msg, content: "I don't have enough information." }
-              : msg,
-          ),
-        );
+        setUiMessages((prev) => {
+          const lastIdx = prev.length - 1;
+          const lastM = prev[lastIdx];
+          if (lastM?.role === "user") {
+            return [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                role: "assistant" as const,
+                parts: [
+                  {
+                    type: "text" as const,
+                    text: "I don't have enough information.",
+                    state: "done" as const,
+                  },
+                ],
+              },
+            ];
+          }
+          return prev;
+        });
       } finally {
         inFlightRef.current = false;
-        setIsSending(false);
-        setIsWaitingForFirstToken(false);
       }
     })();
-  }, [isLoadingHistory, messages, sessionId, redirectOnly, streamResponse]);
+  }, [
+    isLoadingHistory,
+    uiMessages,
+    sessionId,
+    redirectOnly,
+    sendMessage,
+    setUiMessages,
+  ]);
 
   const handleSubmit = useCallback(
     (event?: { preventDefault?: () => void }) => {
@@ -413,11 +510,13 @@ export function useChatV2({
     [input, isSending, submitQuery],
   );
 
-  /** Fills the composer with a quick prompt without sending. */
-  const applyQuickPrompt = useCallback((text: string) => {
-    if (isSending) return;
-    setInput(text);
-  }, [isSending]);
+  const applyQuickPrompt = useCallback(
+    (text: string) => {
+      if (isSending) return;
+      setInput(text);
+    },
+    [isSending],
+  );
 
   const prefixedSubmit = useCallback(
     (prefix: string) => {
@@ -438,6 +537,7 @@ export function useChatV2({
     isActive,
     isLoadingHistory,
     isWaitingForFirstToken,
+    loadingPhase,
     handleInputChange,
     handleSubmit,
     submitQuery,
