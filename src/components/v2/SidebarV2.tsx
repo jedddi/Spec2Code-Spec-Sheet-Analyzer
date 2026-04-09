@@ -10,7 +10,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  ArrowLeftRight,
   Ellipsis,
   LayoutDashboard,
   Loader2,
@@ -429,7 +428,7 @@ export default function SidebarV2() {
         </nav>
       </div>
 
-      {/* Bottom: Settings + Old Version + Profile */}
+      {/* Bottom: Settings + Profile */}
       <div className={isCollapsed ? "px-2 pb-4 pt-2" : "px-5 pb-5 pt-2"}>
         {/* Settings */}
         {isCollapsed ? (
@@ -464,27 +463,8 @@ export default function SidebarV2() {
           </Link>
         )}
 
-        {/* Switch to Old Version — hidden when collapsed */}
-        <AnimatePresence initial={false}>
-          {!isCollapsed && (
-            <motion.div
-              key="old-version"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.15 }}
-              className="overflow-hidden"
-            >
-              <Link
-                href="/v1"
-                className="mb-3 flex w-full items-center gap-3 border-b border-white/20 pb-3 text-left text-xs text-white/50 transition-colors hover:text-white/80"
-              >
-                <ArrowLeftRight className="h-4 w-4" />
-                Switch to Old Version
-              </Link>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Divider */}
+        {!isCollapsed && <div className="mb-3 border-b border-white/20" />}
 
         <UserProfileV2
           name={userName}

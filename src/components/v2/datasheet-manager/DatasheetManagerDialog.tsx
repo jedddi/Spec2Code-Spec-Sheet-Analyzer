@@ -503,7 +503,9 @@ export default function DatasheetManagerDialog({
                         <span className="text-xs text-zinc-600">
                           {formatDate(doc.created_at)}
                         </span>
-                        <div className="text-xs">{renderStatus(doc.status)}</div>
+                        <div className="text-xs">
+                          {renderStatus(doc.status, doc.chunk_count)}
+                        </div>
                       </div>
                     ))
                   )}
@@ -642,7 +644,23 @@ export default function DatasheetManagerDialog({
   );
 }
 
-function renderStatus(status: string) {
+function renderStatus(status: string, chunkCount: number) {
+  if (status === "completed" && chunkCount === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-blue-600">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-blue-500" />
+        Building index…
+      </span>
+    );
+  }
+  if (status === "pending") {
+    return (
+      <span className="inline-flex items-center gap-1 text-zinc-600">
+        <span className="h-2 w-2 rounded-full bg-zinc-400" />
+        Queued
+      </span>
+    );
+  }
   if (status === "processing") {
     return (
       <span className="inline-flex items-center gap-1 text-emerald-600">
@@ -651,7 +669,7 @@ function renderStatus(status: string) {
       </span>
     );
   }
-  if (status === "ready") {
+  if (status === "completed" && chunkCount > 0) {
     return (
       <span className="inline-flex items-center gap-1 font-medium text-emerald-600">
         <CheckCircle2 className="h-3.5 w-3.5" />
@@ -659,10 +677,17 @@ function renderStatus(status: string) {
       </span>
     );
   }
+  if (status === "failed") {
+    return (
+      <span className="inline-flex items-center gap-1 text-amber-600">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        Extraction failed
+      </span>
+    );
+  }
   return (
-    <span className="inline-flex items-center gap-1 text-amber-600">
-      <AlertTriangle className="h-3.5 w-3.5" />
-      Extraction failed
+    <span className="inline-flex items-center gap-1 text-zinc-500">
+      Unknown
     </span>
   );
 }

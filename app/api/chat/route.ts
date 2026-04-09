@@ -1,9 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  streamText,
+} from "ai";
+import type { NextRequest } from "next/server";
 import { searchDocuments } from "@/src/lib/retrieval/search";
 import { createServerSupabase } from "@/src/lib/supabase/server";
-import { chatStream, type ChatMessage } from "@/src/lib/ai/openrouter";
+import { getChatLanguageModel, type ChatMessage } from "@/src/lib/ai/openrouter";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
 
 const DEFAULT_TOP_K = 6;
 
@@ -44,61 +50,133 @@ ${query}
 `.trim();
 }
 
+function textFromUIMessageLike(msg: unknown): string {
+  if (!msg || typeof msg !== "object") return "";
+  const m = msg as {
+    role?: string;
+    content?: unknown;
+    parts?: unknown[];
+  };
+  if (m.role !== "user") return "";
+  if (typeof m.content === "string") return m.content;
+  if (Array.isArray(m.parts)) {
+    return m.parts
+      .filter(
+        (p): p is { type?: string; text?: string } =>
+          !!p && typeof p === "object",
+      )
+      .filter((p) => p.type === "text")
+      .map((p) => (typeof p.text === "string" ? p.text : ""))
+      .join("");
+  }
+  return "";
+}
+
+function extractUserQueryFromBody(body: Record<string, unknown>): string | null {
+  const q = body.query;
+  if (typeof q === "string" && q.trim().length > 0) return q.trim();
+
+  const rawMessages = body.messages;
+  if (!Array.isArray(rawMessages)) return null;
+  for (let i = rawMessages.length - 1; i >= 0; i--) {
+    const text = textFromUIMessageLike(rawMessages[i]).trim();
+    if (text.length > 0) return text;
+  }
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
-  const { query } = body as { query?: string };
-  if (!query || typeof query !== "string" || query.trim().length === 0) {
-    return NextResponse.json(
-      { error: "Missing or invalid `query` field" },
-      { status: 400 },
+  const b = body as Record<string, unknown>;
+  const query = extractUserQueryFromBody(b);
+  if (!query) {
+    return new Response(
+      JSON.stringify({
+        error: "Missing or invalid `query` or last user `messages` entry",
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
     );
   }
 
   try {
-    const matches = await searchDocuments(query, user.id, DEFAULT_TOP_K);
+    const { matches, lowConfidence } = await searchDocuments(
+      query,
+      user.id,
+      DEFAULT_TOP_K,
+    );
 
     const PREVIEW_LENGTH = 200;
     const citations = matches.map((match) => ({
       document_path: match.document_path,
-      preview: match.content.slice(0, PREVIEW_LENGTH) + (match.content.length > PREVIEW_LENGTH ? "…" : ""),
+      preview:
+        match.content.slice(0, PREVIEW_LENGTH) +
+        (match.content.length > PREVIEW_LENGTH ? "…" : ""),
       chunk_index: match.chunk_index,
       page: match.page,
       similarity: Number(match.similarity.toFixed(3)),
     }));
 
     const prompt = buildPrompt(
-      query.trim(),
+      query,
       matches.map(
         (match) =>
           `[source: ${cleanFilename(match.document_path)}]\n${match.content}`,
       ),
     );
 
-    const messages: ChatMessage[] = [{ role: "user", content: prompt }];
-    const stream = chatStream(messages);
+    const llmMessages: ChatMessage[] = [{ role: "user", content: prompt }];
 
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
-        "x-chat-sources": encodeURIComponent(JSON.stringify(citations)),
+    const responseHeaders: Record<string, string> = {
+      "Cache-Control": "no-cache, no-transform",
+      "x-chat-sources": encodeURIComponent(JSON.stringify(citations)),
+      "x-chat-confidence": lowConfidence ? "low" : "high",
+    };
+
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        writer.write({
+          type: "data-chatPhase",
+          data: { phase: "analyzing" },
+          transient: true,
+        });
+        const result = streamText({
+          model: getChatLanguageModel(),
+          messages: llmMessages,
+        });
+        writer.merge(result.toUIMessageStream());
       },
+    });
+
+    return createUIMessageStreamResponse({
+      stream,
+      headers: responseHeaders,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown chat error";
     console.error("[/api/chat]", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 }

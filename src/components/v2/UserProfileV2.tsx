@@ -13,7 +13,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ChevronsUpDown, LogOut } from "lucide-react";
-import Link from "next/link";
 
 interface UserProfileV2Props {
   name: string;
@@ -89,10 +88,6 @@ export default function UserProfileV2({
           <p className="truncate text-sm font-medium">{name}</p>
           <p className="truncate text-xs text-muted-foreground">{email}</p>
         </div>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/">Switch to Old Version</Link>
-        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={onSignOut}

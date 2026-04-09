@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     await supabase
       .from("documents")
       .update({
-        status: "error",
+        status: "failed",
         error_message: message,
         updated_at: new Date().toISOString(),
       })

@@ -1,18 +1,24 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { Sparkles, TriangleAlert } from "lucide-react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import type { ChatMessageV2 } from "@/src/hooks/useChatV2";
+import { CitationsDropdown } from "@/src/components/chat-citations";
+import type { ChatLoadingPhase, ChatMessageV2 } from "@/src/hooks/useChatV2";
+import LoadingStatus from "./LoadingStatus";
 
 interface ChatMessageBubbleProps {
   message: ChatMessageV2;
+  loadingPhase?: ChatLoadingPhase;
 }
 
-export default function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
+export default function ChatMessageBubble({
+  message,
+  loadingPhase = null,
+}: ChatMessageBubbleProps) {
   if (message.role === "user") {
     return <UserBubble content={message.content} />;
   }
-  return <AssistantBubble content={message.content} />;
+  return <AssistantBubble message={message} loadingPhase={loadingPhase} />;
 }
 
 function UserBubble({ content }: { content: string }) {
@@ -28,8 +34,16 @@ function UserBubble({ content }: { content: string }) {
   );
 }
 
-function AssistantBubble({ content }: { content: string }) {
+function AssistantBubble({
+  message,
+  loadingPhase,
+}: {
+  message: ChatMessageV2;
+  loadingPhase: ChatLoadingPhase;
+}) {
+  const { content, citations, lowConfidence } = message;
   const isEmpty = !content;
+  const hasSources = citations && citations.length > 0;
 
   return (
     <div className="overflow-hidden rounded-xl border border-[#dfe6e6] bg-white">
@@ -48,12 +62,31 @@ function AssistantBubble({ content }: { content: string }) {
 
         <div className="pl-5">
           {isEmpty ? (
-            <TypingIndicator />
+            <div className="space-y-2 py-1">
+              <LoadingStatus phase={loadingPhase} />
+              <TypingIndicator />
+            </div>
           ) : (
             <div className="prose-v2 max-w-none text-base leading-relaxed text-[#4f5059]/80">
               <MarkdownRenderer>{content}</MarkdownRenderer>
             </div>
           )}
+
+          {lowConfidence && !isEmpty ? (
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+              <p className="text-xs text-amber-700">
+                Low confidence &mdash; the retrieved sources may not be fully relevant to your query.
+              </p>
+            </div>
+          ) : null}
+
+          {hasSources ? (
+            <div className="mt-4 border-t border-[#dfe6e6] pt-3">
+              <p className="mb-2 text-xs font-medium text-[#334a4d]/85">Sources</p>
+              <CitationsDropdown citations={citations} messageId={message.id} />
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

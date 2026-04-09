@@ -31,7 +31,7 @@ export default function GenerateSnippetModal({
   onSubmit,
 }: GenerateSnippetModalProps) {
   const readyDocs = useMemo(
-    () => documents.filter((doc) => doc.status === "ready"),
+    () => documents.filter((doc) => doc.status === "completed"),
     [documents],
   );
   const [sourcePdfId, setSourcePdfId] = useState<string>(preselectedSourcePdfId ?? "");

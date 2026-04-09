@@ -603,3 +603,108 @@ body {
     font-size: 1.4rem;
   }
 }
+
+/* ─── Siri orb (new chat hero) — see components/ui/siri-orb.tsx ─── */
+@property --siri-angle {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 0deg;
+}
+
+.siri-orb {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  isolation: isolate;
+  background: radial-gradient(
+    circle,
+    rgba(0, 0, 0, 0.1) 0%,
+    rgba(0, 0, 0, 0.04) 35%,
+    transparent 72%
+  );
+}
+
+.dark .siri-orb {
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.03) 35%,
+    transparent 72%
+  );
+}
+
+.siri-orb__blob {
+  position: absolute;
+  inset: -18%;
+  border-radius: 50%;
+  background:
+    conic-gradient(
+      from calc(var(--siri-angle) * 1.2) at 30% 65%,
+      var(--c3) 0deg,
+      transparent 45deg 315deg,
+      var(--c3) 360deg
+    ),
+    conic-gradient(
+      from calc(var(--siri-angle) * 0.8) at 70% 35%,
+      var(--c2) 0deg,
+      transparent 60deg 300deg,
+      var(--c2) 360deg
+    ),
+    conic-gradient(
+      from calc(var(--siri-angle) * -1.5) at 65% 75%,
+      var(--c1) 0deg,
+      transparent 90deg 270deg,
+      var(--c1) 360deg
+    ),
+    conic-gradient(
+      from calc(var(--siri-angle) * 2.1) at 25% 25%,
+      var(--c2) 0deg,
+      transparent 30deg 330deg,
+      var(--c2) 360deg
+    ),
+    conic-gradient(
+      from calc(var(--siri-angle) * -0.7) at 80% 80%,
+      var(--c1) 0deg,
+      transparent 45deg 315deg,
+      var(--c1) 360deg
+    ),
+    radial-gradient(
+      ellipse 120% 80% at 40% 60%,
+      var(--c3) 0%,
+      transparent 50%
+    );
+  filter: blur(var(--blur-amount)) contrast(var(--contrast-amount)) saturate(1.25);
+  animation: siri-orb-rotate var(--animation-duration, 20s) linear infinite;
+  transform: translateZ(0);
+  pointer-events: none;
+}
+
+.siri-orb__shine {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 45% 55%,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(255, 255, 255, 0.08) 32%,
+    transparent 62%
+  );
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+@keyframes siri-orb-rotate {
+  from {
+    --siri-angle: 0deg;
+  }
+  to {
+    --siri-angle: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .siri-orb__blob {
+    animation: none;
+  }
+}

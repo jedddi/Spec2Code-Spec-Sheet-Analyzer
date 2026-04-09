@@ -32,8 +32,10 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isLoginRoute = pathname === "/login";
+  // Inngest must be able to reach this endpoint without an end-user session.
+  const isInngestRoute = pathname === "/api/inngest";
 
-  if (!user && !isLoginRoute) {
+  if (!user && !isLoginRoute && !isInngestRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

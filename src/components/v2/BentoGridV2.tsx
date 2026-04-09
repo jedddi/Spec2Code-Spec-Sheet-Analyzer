@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  fadeUpItem,
+  staggerContainer,
+  staggerContainerTight,
+} from "@/src/components/v2/chat/new-chat-motion";
+import { motion } from "framer-motion";
 import { CircleHelp, Plus } from "lucide-react";
 
 interface PromptItem {
@@ -12,20 +18,31 @@ interface BentoGridV2Props {
   onSelect: (text: string) => void;
 }
 
-// TODO: Connect onSelect to submitQuery from useDocumentChat.
 export default function BentoGridV2({ prompts, onSelect }: BentoGridV2Props) {
   return (
-    <section className="mx-auto mt-10 w-full max-w-[814px]">
-      <p className="text-xs uppercase tracking-wide text-[#888]/50">
+    <motion.section
+      className="mx-auto mt-10 w-full max-w-[814px]"
+      variants={staggerContainer}
+    >
+      <motion.p
+        variants={fadeUpItem}
+        className="text-xs uppercase tracking-wide text-[#888]/50"
+      >
         Quick Prompts
-      </p>
+      </motion.p>
 
-      <div className="mt-3 grid grid-cols-2 gap-4">
+      <motion.div
+        className="mt-3 grid grid-cols-2 gap-4"
+        variants={staggerContainerTight}
+      >
         {prompts.map((prompt) => (
-          <button
+          <motion.button
             key={prompt.id}
             type="button"
+            variants={fadeUpItem}
             onClick={() => onSelect(prompt.text)}
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             className="flex items-start gap-4 rounded-2xl border border-[#e1e4ea] bg-[#fafbfb] p-5 text-left shadow-[0px_1px_2px_rgba(10,13,20,0.03)] transition-colors hover:bg-gray-50"
           >
             <CircleHelp className="mt-0.5 h-6 w-6 shrink-0 text-[var(--v2-primary)]" />
@@ -33,9 +50,9 @@ export default function BentoGridV2({ prompts, onSelect }: BentoGridV2Props) {
               {prompt.text}
             </p>
             <Plus className="mt-0.5 h-5 w-5 shrink-0 text-[#888]" />
-          </button>
+          </motion.button>
         ))}
-      </div>
-    </section>
+      </motion.div>
+    </motion.section>
   );
 }

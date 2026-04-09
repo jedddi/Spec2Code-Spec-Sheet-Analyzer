@@ -1,3 +1,6 @@
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import type { LanguageModel } from "ai";
+
 const BASE_URL = "https://openrouter.ai/api/v1";
 
 function getApiKey(): string {
@@ -24,6 +27,28 @@ function headers(): Record<string, string> {
 
 export const CHAT_MODEL =
   process.env.OPENROUTER_CHAT_MODEL ?? "openai/gpt-4o-mini";
+
+let openRouterProvider: ReturnType<typeof createOpenRouter> | null = null;
+
+/**
+ * OpenRouter provider for Vercel AI SDK (`streamText`, etc.).
+ * Uses the same env vars as manual `fetch` helpers below.
+ */
+export function getOpenRouterProvider() {
+  if (!openRouterProvider) {
+    openRouterProvider = createOpenRouter({
+      apiKey: getApiKey(),
+      appUrl: process.env.OPENROUTER_HTTP_REFERER,
+      appName: process.env.OPENROUTER_APP_NAME,
+    });
+  }
+  return openRouterProvider;
+}
+
+/** Language model for RAG chat completions (env: OPENROUTER_CHAT_MODEL). */
+export function getChatLanguageModel(): LanguageModel {
+  return getOpenRouterProvider()(CHAT_MODEL);
+}
 
 export const METADATA_MODEL =
   process.env.OPENROUTER_METADATA_MODEL ?? CHAT_MODEL;
@@ -82,89 +107,6 @@ export async function chatComplete(
 
   const json = (await res.json()) as { choices: ChatCompletionChoice[] };
   return json.choices[0].message.content;
-}
-
-// ---------------------------------------------------------------------------
-// Streaming chat completion — returns a ReadableStream<Uint8Array> of raw
-// text (same contract the existing chat route returns to the client).
-// ---------------------------------------------------------------------------
-
-export function chatStream(
-  messages: ChatMessage[],
-  opts: { model?: string; temperature?: number } = {},
-): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-
-  return new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const body: Record<string, unknown> = {
-        model: opts.model ?? CHAT_MODEL,
-        messages,
-        stream: true,
-      };
-      if (opts.temperature !== undefined) body.temperature = opts.temperature;
-
-      let res: Response;
-      try {
-        res = await fetch(`${BASE_URL}/chat/completions`, {
-          method: "POST",
-          headers: headers(),
-          body: JSON.stringify(body),
-        });
-      } catch (err) {
-        controller.error(err);
-        return;
-      }
-
-      if (!res.ok) {
-        const text = await res.text();
-        controller.error(
-          new Error(`OpenRouter stream error ${res.status}: ${text}`),
-        );
-        return;
-      }
-
-      if (!res.body) {
-        controller.error(new Error("OpenRouter returned no response body"));
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data: ")) continue;
-            const payload = trimmed.slice(6);
-            if (payload === "[DONE]") continue;
-
-            try {
-              const parsed = JSON.parse(payload) as {
-                choices: { delta: { content?: string } }[];
-              };
-              const text = parsed.choices?.[0]?.delta?.content;
-              if (text) controller.enqueue(encoder.encode(text));
-            } catch {
-              // malformed SSE chunk — skip
-            }
-          }
-        }
-        controller.close();
-      } catch (err) {
-        controller.error(err);
-      }
-    },
-  });
 }
 
 // ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { useDocumentChatContext } from "@/src/contexts/document-chat-context";
 
 import { CitationsDropdown } from "./chat-citations";
+import LoadingStatus from "@/src/components/v2/LoadingStatus";
 
 const CHAT_MAX_WIDTH_CLASS = "max-w-4xl";
 
@@ -26,6 +27,7 @@ export default function DocumentChat({ className }: { className?: string }) {
     isSending,
     error,
     isWaitingForFirstToken,
+    loadingPhase,
     globalStatus,
     handleInputChange,
     handleSubmit,
@@ -99,6 +101,14 @@ export default function DocumentChat({ className }: { className?: string }) {
           setMessages as unknown as Dispatch<SetStateAction<Message[]>>
         }
       />
+      {loadingPhase ? (
+        <div className="px-4 pt-2 text-sm text-muted-foreground md:px-6">
+          <LoadingStatus
+            phase={loadingPhase}
+            className="flex items-center gap-2 text-muted-foreground"
+          />
+        </div>
+      ) : null}
       {globalStatus ? (
         <p className="flex items-center gap-2 px-4 pt-2 text-sm text-muted-foreground md:px-6">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />

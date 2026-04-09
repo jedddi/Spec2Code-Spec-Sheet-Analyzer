@@ -1,29 +1,31 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { SiriOrb } from "@/components/ui/siri-orb";
+import {
+  fadeUpItem,
+  staggerContainer,
+} from "@/src/components/v2/chat/new-chat-motion";
+import { motion } from "framer-motion";
 
-interface ChatInterfaceV2Props {
-  greeting?: string;
-  subtitle?: string;
-}
-
-// TODO: Connect to user/session state for personalized greeting.
-export default function ChatInterfaceV2({
-  greeting = "Good Morning, James",
-  subtitle = "Your AI command center is fully optimized. Let\u2019s design smarter systems today.",
-}: ChatInterfaceV2Props) {
+export default function ChatInterfaceV2() {
   return (
-    <section className="flex flex-col items-center pt-[150px]">
-      {/* Blue icon badge */}
-      <div className="flex h-14 w-14 items-center justify-center rounded-xl border-[2.5px] border-[var(--v2-primary)] bg-[var(--v2-primary)]">
-        <Sparkles className="h-6 w-6 text-white" />
-      </div>
+    <motion.section
+      className="flex flex-col items-center pt-[150px]"
+      variants={staggerContainer}
+    >
+      <motion.div
+        variants={fadeUpItem}
+        className="relative z-10 flex h-[112px] w-[112px] shrink-0 items-center justify-center drop-shadow-[0_8px_24px_rgba(3,134,253,0.22)]"
+      >
+        <SiriOrb size="112px" animationDuration={22} />
+      </motion.div>
 
-      <h1 className="mt-[20px] text-2xl font-semibold text-black">
-        {greeting}
-      </h1>
-
-      <p className="mt-2 text-center text-sm text-[#4f5059]">{subtitle}</p>
-    </section>
+      <motion.p
+        variants={fadeUpItem}
+        className="mt-[20px] text-center text-2xl font-semibold text-black"
+      >
+        Hello, How can I help you today?
+      </motion.p>
+    </motion.section>
   );
 }

@@ -1,7 +1,19 @@
 "use client";
 
-import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import {
+  KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { getTextFromUIMessage } from "@/src/lib/chat/ui-message-text";
+import type { AppChatUIMessage, ChatLoadingPhase } from "@/src/hooks/useChatV2";
+import LoadingStatus from "@/src/components/v2/LoadingStatus";
 
 type Citation = {
   document_path: string;
@@ -18,15 +30,10 @@ interface ChatMessage {
 }
 
 const STORAGE_KEY = "chat-history";
+const SIDEBAR_CHAT_ID = "sidebar-local";
 
 const UUID_PREFIX_RE =
   /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(.+)$/i;
-
-function generateId(): string {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], {
@@ -42,7 +49,39 @@ function cleanFilename(documentPath: string): string {
   return match ? match[2] : raw;
 }
 
-function CitationsDropdown({ citations, messageId }: { citations: Citation[]; messageId: string }) {
+function parseCitations(header: string | null): Citation[] {
+  if (!header) return [];
+  try {
+    const parsed = JSON.parse(decodeURIComponent(header)) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is Citation =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as Citation).document_path === "string" &&
+        typeof (item as Citation).preview === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function storedToUi(m: ChatMessage): AppChatUIMessage {
+  return {
+    id: m.id,
+    role: m.role,
+    parts: [{ type: "text", text: m.content, state: "done" }],
+    metadata: m.citations?.length ? { citations: m.citations as never } : undefined,
+  };
+}
+
+function CitationsDropdown({
+  citations,
+  messageId,
+}: {
+  citations: Citation[];
+  messageId: string;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   if (citations.length === 0) return null;
 
@@ -87,27 +126,149 @@ function CitationsDropdown({ citations, messageId }: { citations: Citation[]; me
 }
 
 export default function SidebarChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [isSending, setIsSending] = useState(false);
-  const [isWaitingForFirstToken, setIsWaitingForFirstToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [citationEpoch, setCitationEpoch] = useState(0);
+  const [serverPhase, setServerPhase] = useState<ChatLoadingPhase>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const timestampsRef = useRef<Record<string, number>>({});
+  const citationsRef = useRef<Citation[]>([]);
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport<AppChatUIMessage>({
+        api: "/api/chat",
+        fetch: async (inputUrl, init) => {
+          const res = await fetch(inputUrl, init);
+          if (res.ok) {
+            citationsRef.current = parseCitations(
+              res.headers.get("x-chat-sources"),
+            );
+            setCitationEpoch((e) => e + 1);
+          }
+          return res;
+        },
+      }),
+    [],
+  );
+
+  const { messages: uiMessages, sendMessage, setMessages: setUiMessages, status } =
+    useChat<AppChatUIMessage>({
+      id: SIDEBAR_CHAT_ID,
+      transport,
+      onData: (part) => {
+        if (part.type === "data-chatPhase") {
+          setServerPhase(part.data.phase);
+        }
+      },
+      onFinish: ({ message: assistantMsg }) => {
+        setServerPhase(null);
+        const snap = [...citationsRef.current];
+        citationsRef.current = [];
+        if (snap.length === 0) return;
+        setUiMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsg.id
+              ? { ...m, metadata: { ...m.metadata, citations: snap as never } }
+              : m,
+          ),
+        );
+      },
+      onError: (err) => {
+        setServerPhase(null);
+        setError(err.message ?? "Chat error");
+        setUiMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant") {
+            return prev.map((m, i) =>
+              i === prev.length - 1
+                ? {
+                    ...m,
+                    parts: [
+                      {
+                        type: "text",
+                        text: "Something went wrong. Please try again.",
+                        state: "done",
+                      },
+                    ],
+                  }
+                : m,
+            );
+          }
+          return prev;
+        });
+      },
+    });
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as ChatMessage[];
-        if (Array.isArray(parsed)) setMessages(parsed);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setUiMessages(parsed.map(storedToUi));
+          for (const m of parsed) {
+            timestampsRef.current[m.id] = m.timestamp;
+          }
+        }
       }
     } catch {
-      // corrupted storage — start fresh
+      /* corrupted storage */
     }
     setHydrated(true);
-  }, []);
+  }, [setUiMessages]);
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const now = Date.now();
+    for (const m of uiMessages) {
+      if (!timestampsRef.current[m.id]) {
+        timestampsRef.current[m.id] = now;
+      }
+    }
+    void citationEpoch;
+    setMessages(
+      uiMessages.map((m, i) => {
+        const content = getTextFromUIMessage(m);
+        const meta = m.metadata as { citations?: Citation[] } | undefined;
+        const isLastAssistant =
+          m.role === "assistant" && i === uiMessages.length - 1;
+        let citations = meta?.citations;
+        if (
+          isLastAssistant &&
+          citationsRef.current.length > 0 &&
+          (status === "streaming" || status === "submitted")
+        ) {
+          citations = citationsRef.current;
+        }
+        const ts = timestampsRef.current[m.id];
+        return {
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          content,
+          timestamp: ts ?? now,
+          citations,
+        };
+      }),
+    );
+  }, [uiMessages, status, citationEpoch, hydrated]);
+
+  const loadingPhase: ChatLoadingPhase = (() => {
+    const last = uiMessages[uiMessages.length - 1];
+    if (last?.role === "assistant" && getTextFromUIMessage(last).length > 0) {
+      return "writing";
+    }
+    if (serverPhase) return serverPhase;
+    if (status === "submitted") return "searching";
+    if (status === "streaming" && last?.role === "assistant") return "analyzing";
+    return null;
+  })();
+
+  const isSending = status === "submitted" || status === "streaming";
 
   useEffect(() => {
     if (!hydrated) return;
@@ -124,130 +285,19 @@ export default function SidebarChat() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  async function sendMessage(userContent: string) {
-    setError(null);
-    setIsSending(true);
-    setIsWaitingForFirstToken(true);
-
-    const assistantMessageId = generateId();
-
-    setMessages((prev) => [
-      ...prev,
-      { id: assistantMessageId, role: "assistant", content: "", timestamp: Date.now() },
-    ]);
-    scrollToBottom();
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: userContent }),
-      });
-
-      const responseSourcesHeader = response.headers.get("x-chat-sources");
-      let responseCitations: Citation[] = [];
-      if (responseSourcesHeader) {
-        try {
-          const parsed = JSON.parse(decodeURIComponent(responseSourcesHeader)) as unknown;
-          if (Array.isArray(parsed)) {
-            responseCitations = parsed.filter(
-              (item): item is Citation =>
-                typeof item === "object" &&
-                item !== null &&
-                typeof (item as Citation).document_path === "string" &&
-                typeof (item as Citation).preview === "string",
-            );
-          }
-        } catch {
-          responseCitations = [];
-        }
-      }
-
-      if (!response.ok) {
-        let message = "Chat request failed";
-        try {
-          const errorPayload = (await response.json()) as { error?: string };
-          message = errorPayload.error ?? message;
-        } catch {
-          // keep default
-        }
-        throw new Error(message);
-      }
-
-      if (!response.body) {
-        throw new Error("No response stream received from chat API.");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = "";
-      let sawFirstToken = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        if (!chunk) continue;
-
-        sawFirstToken = true;
-        setIsWaitingForFirstToken(false);
-        accumulated += chunk;
-
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId
-              ? { ...msg, content: accumulated, citations: responseCitations }
-              : msg,
-          ),
-        );
-        scrollToBottom();
-      }
-
-      if (!sawFirstToken) {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId
-              ? {
-                  ...msg,
-                  content: "I don't have enough information.",
-                  citations: responseCitations,
-                }
-              : msg,
-          ),
-        );
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown chat error";
-      setError(message);
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantMessageId
-            ? { ...msg, content: "Something went wrong. Please try again." }
-            : msg,
-        ),
-      );
-    } finally {
-      setIsSending(false);
-      setIsWaitingForFirstToken(false);
-      scrollToBottom();
-    }
-  }
-
-  function handleSend() {
+  async function handleSend() {
     const trimmed = input.trim();
     if (!trimmed || isSending) return;
 
-    const userMsg: ChatMessage = {
-      id: generateId(),
-      role: "user",
-      content: trimmed,
-      timestamp: Date.now(),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
     setInput("");
-    sendMessage(trimmed);
+    setError(null);
+
+    try {
+      await sendMessage({ text: trimmed });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown chat error";
+      setError(message);
+    }
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -257,12 +307,13 @@ export default function SidebarChat() {
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      void handleSend();
     }
   }
 
   function clearHistory() {
-    setMessages([]);
+    setUiMessages([]);
+    timestampsRef.current = {};
     localStorage.removeItem(STORAGE_KEY);
   }
 
@@ -276,9 +327,7 @@ export default function SidebarChat() {
 
   return (
     <aside className="flex h-full w-[440px] flex-shrink-0 flex-col border-r border-border bg-muted p-4">
-      {/* Floating chat card */}
       <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
           <h2 className="text-sm font-semibold text-foreground">Chat</h2>
           {messages.length > 0 && (
@@ -292,7 +341,6 @@ export default function SidebarChat() {
           )}
         </div>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto px-3 py-4">
           {messages.length === 0 ? (
             <div className="flex h-full items-center justify-center">
@@ -320,11 +368,35 @@ export default function SidebarChat() {
                             : "rounded-2xl rounded-bl-md bg-muted text-foreground"
                         }`}
                       >
-                        <p className="whitespace-pre-wrap">{msg.content || "..."}</p>
-
-                        {!isUser && msg.citations && msg.citations.length > 0 && (
-                          <CitationsDropdown citations={msg.citations} messageId={msg.id} />
+                        {!isUser && msg.content === "" ? (
+                          <div className="space-y-2">
+                            <LoadingStatus
+                              phase={loadingPhase}
+                              className="text-muted-foreground"
+                            />
+                            <span className="inline-flex gap-1">
+                              <span className="animate-bounce">.</span>
+                              <span className="animate-bounce [animation-delay:0.15s]">
+                                .
+                              </span>
+                              <span className="animate-bounce [animation-delay:0.3s]">
+                                .
+                              </span>
+                            </span>
+                          </div>
+                        ) : (
+                          <p className="whitespace-pre-wrap">{msg.content}</p>
                         )}
+
+                        {!isUser &&
+                          msg.citations &&
+                          msg.citations.length > 0 &&
+                          msg.content !== "" && (
+                            <CitationsDropdown
+                              citations={msg.citations}
+                              messageId={msg.id}
+                            />
+                          )}
                       </div>
                       <span className="mt-1 px-1 text-[10px] text-muted-foreground">
                         {formatTime(msg.timestamp)}
@@ -334,29 +406,11 @@ export default function SidebarChat() {
                 })}
               </AnimatePresence>
 
-              {isWaitingForFirstToken && (
-                <motion.div
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                  className="flex items-start"
-                >
-                  <div className="rounded-2xl rounded-bl-md bg-muted px-3.5 py-2.5 text-sm text-muted-foreground">
-                    <span className="inline-flex gap-1">
-                      <span className="animate-bounce">.</span>
-                      <span className="animate-bounce [animation-delay:0.15s]">.</span>
-                      <span className="animate-bounce [animation-delay:0.3s]">.</span>
-                    </span>
-                  </div>
-                </motion.div>
-              )}
-
               <div ref={messagesEndRef} />
             </div>
           )}
         </div>
 
-        {/* Input area */}
         <div className="border-t border-border bg-card px-3 py-3">
           {error && <p className="mb-2 text-xs text-destructive">{error}</p>}
           <div className="flex items-end gap-2">
@@ -372,7 +426,7 @@ export default function SidebarChat() {
             />
             <button
               type="button"
-              onClick={handleSend}
+              onClick={() => void handleSend()}
               disabled={isSending || input.trim().length === 0}
               className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:hover:bg-primary"
               aria-label="Send"
