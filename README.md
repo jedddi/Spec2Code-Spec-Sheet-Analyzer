@@ -1,5 +1,7 @@
 # Spec2Code
 
+https://synthetix-data-sheet-analyzer.vercel.app/
+
 A Next.js app for working with hardware datasheets: upload PDFs, ingest them into a vector index, chat with source-grounded answers, generate quick technical specs, and draft C++ headers.
 
 ## Features
