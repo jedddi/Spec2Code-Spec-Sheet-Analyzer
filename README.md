@@ -66,43 +66,6 @@ flowchart TD
 - Supabase project (database + storage + auth)
 - OpenRouter API key
 
-## Environment Variables
-
-Create `.env.local` in the project root:
-
-```bash
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-OPENROUTER_API_KEY=your_openrouter_api_key
-UNSTRUCTURED_API_KEY=your_unstructured_api_key
-
-# Inngest (production / hosted deploy). Local: run `npx inngest-cli@latest dev` with your Next dev server.
-# INNGEST_EVENT_KEY=…        # used when your app calls inngest.send (e.g. /api/documents/queue)
-# INNGEST_SIGNING_KEY=…     # used by serve() on /api/inngest so Inngest Cloud can authenticate to your app
-# See also [.env.example](.env.example).
-
-# Optional: verify DB webhook requests (legacy Edge path — set as Edge secret INGEST_WEBHOOK_SECRET — not SUPABASE_*)
-# INGEST_WEBHOOK_SECRET=choose_a_long_random_secret
-
-# Optional model overrides (defaults shown):
-# OPENROUTER_CHAT_MODEL=openai/gpt-4o-mini
-# OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
-# OPENROUTER_METADATA_MODEL=openai/gpt-4o-mini
-# OPENROUTER_HTTP_REFERER=https://your-app-domain.com
-# OPENROUTER_APP_NAME=Spec2Code
-```
-
-Notes:
-
-- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are used by browser, middleware, and server session clients.
-- `SUPABASE_SERVICE_ROLE_KEY` is used server-side for privileged database operations.
-- `OPENROUTER_API_KEY` is required for chat, embeddings, quick specs, and header generation.
-- `UNSTRUCTURED_API_KEY` is required by the async ingestion Edge Function (set via `supabase secrets set`).
-- **Do not** try to set `SUPABASE_SERVICE_ROLE_KEY` (or any `SUPABASE_*` name) with `supabase secrets set`; the CLI skips those. Hosted functions already receive `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` automatically.
-- Optional webhook verification: set secret `INGEST_WEBHOOK_SECRET` and send the same value in header `x-webhook-secret` from the Database Webhook.
-- `OPENROUTER_CHAT_MODEL`, `OPENROUTER_EMBEDDING_MODEL`, and `OPENROUTER_METADATA_MODEL` are optional overrides for the default models.
-
 ## Installation and Run
 
 Install dependencies:
